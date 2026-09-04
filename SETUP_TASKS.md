@@ -155,9 +155,13 @@ This repository is public, so access codes are never written into it.
 not have one, and prints the full list. Codes already in the file are kept, so
 re-seeding never locks anyone out. That is verified.
 
-Codes are eight characters from an alphabet with no `i`, `l`, `o`, `0` or `1`,
-so nothing is ambiguous when read off a screen. That is roughly 850 billion
-combinations, which is safe even without login rate limiting.
+Codes are **six digits**. The PIN field opens a numeric keypad on a phone, so
+letters would be untypeable for anyone on mobile. They never start with a zero,
+which avoids "is it 48270 or 048270?" when somebody reads their code aloud.
+
+That is a million combinations with no login rate limiting, which is a
+deliberate trade the league made in favour of a code people can enter
+one-handed.
 
 ## 2.2 Back up db/pins.local.json
 

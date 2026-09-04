@@ -9,13 +9,22 @@ import { dirname, join } from 'node:path';
  */
 const PINS_FILE = join(process.cwd(), 'db', 'pins.local.json');
 
-// No i, l, o, 0 or 1, so a code read off a screen is never ambiguous.
-const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
-const LENGTH = 8;
+/**
+ * Digits only. The PIN field opens a numeric keypad on a phone, so anything
+ * else would be untypeable for half the league.
+ *
+ * Six digits is a million combinations. That is weak against a patient attacker
+ * and there is no login rate limiting, which is a deliberate trade the league
+ * made in favour of a code people can actually enter one-handed.
+ */
+const ALPHABET = '0123456789';
+const LENGTH = 6;
 
 export function generatePin(): string {
-  let out = '';
-  for (let i = 0; i < LENGTH; i += 1) out += ALPHABET[randomInt(ALPHABET.length)];
+  // Never start with a zero. A leading zero invites "is it 48270 or 048270?"
+  // when somebody reads their code off a phone screen.
+  let out = ALPHABET[1 + randomInt(ALPHABET.length - 1)];
+  for (let i = 1; i < LENGTH; i += 1) out += ALPHABET[randomInt(ALPHABET.length)];
   return out;
 }
 

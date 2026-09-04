@@ -14,7 +14,7 @@ Target deadline: 7 September 2026, official runs open at midnight.
 | 3 | Backend, manager access, one official attempt | Done, pushed (`4087dd5`) |
 | 4 | Draft position selection | Done (`npm run test:draft`) |
 | 5 | Commissioner dashboard and final reveal | Not started |
-| 6 | PWA, deploy, production config | Not started |
+| 6 | PWA, deploy, production config | Deployed to Vercel; PWA and polish outstanding |
 
 Everything below Phase 3 works locally against a real Postgres. Nothing is
 deployed yet.
@@ -263,9 +263,12 @@ throughout. The team field is nullable and every screen renders correctly
 without one, which is verified. The final reveal in Phase 5 will show names
 alone.
 
-**The roster is live.** Twelve managers, with Nicholas as both commissioner and
-player. Access codes are generated into `db/pins.local.json`, which is gitignored
-because this repository is public.
+**The roster is live and deployed.** Twelve managers, with Nicholas as both
+commissioner and player. Access codes are six digits, because the PIN field
+opens a numeric keypad on a phone. They are generated into `db/pins.local.json`,
+which is gitignored.
+
+Live at https://fw-finest-draft-dash.vercel.app against Neon Postgres.
 
 ## What is still open
 
