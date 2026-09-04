@@ -167,6 +167,33 @@ async function main() {
     check('an unknown window is refused', bad.status === 400);
   }
 
+  console.log('\nThe dashboard settles the ranking itself');
+  {
+    await resetAll(admin);
+    const names = ROSTER.map((m) => m.name);
+    await setScores(Object.fromEntries(names.map((n, i) => [n, 1000 + i * 100])));
+    await admin.post('/api/admin/window', { which: 'selection', value: true });
+
+    // Nobody has opened a draft page, so nothing has triggered ranking yet.
+    const unranked = await query<{ n: string }>(
+      'select count(*)::text as n from league_members where selection_priority is not null',
+    );
+    check('nothing is ranked before the dashboard is opened', unranked[0].n === '0');
+
+    const res = await admin.get('/api/admin/overview');
+    check('the dashboard freezes the ranking', res.body.league?.rankingsFrozen === true);
+    check(
+      'and every manager has a priority',
+      res.body.members.every((m: { selection_priority: number | null }) => m.selection_priority !== null),
+    );
+    check(
+      'the highest score is ranked first',
+      res.body.members[0]?.display_name === names[names.length - 1],
+      res.body.members[0]?.display_name,
+    );
+    check('it names who is on the clock', res.body.onTheClock?.display_name === names[names.length - 1]);
+  }
+
   console.log('\nResetting an official attempt');
   {
     await resetAll(admin);
@@ -182,13 +209,44 @@ async function main() {
     const res = await admin.post('/api/admin/reset-attempt', { memberId: target.id });
     check('an attempt can be reset before anyone picks', res.status === 200, `got ${res.status}`);
 
-    const after = await admin.get('/api/admin/overview');
-    const reset = after.body.members.find(
-      (m: { display_name: string }) => m.display_name === names[3],
-    );
+    // Read straight from the database. Opening the dashboard while selection
+    // is forced open would itself re-rank, and assign the zero we are checking
+    // is absent.
+    const reset = (
+      await query<{ official_score: number | null; official_started_at: string | null }>(
+        `select official_score, official_started_at::text as official_started_at
+           from league_members where display_name = $1`,
+        [names[3]],
+      )
+    )[0];
     check('their score is cleared', reset.official_score === null);
-    check('they can run again', reset.official_started_at === null);
-    check('rankings were unfrozen', after.body.league?.rankingsFrozen === false);
+    check('their attempt is cleared', reset.official_started_at === null);
+
+    const frozen = await query<{ n: string }>(
+      'select count(*)::text as n from league_settings where rankings_frozen_at is not null',
+    );
+    check('rankings were unfrozen', frozen[0].n === '0');
+
+    // The point of a reset is that they can run again. That means the league
+    // has to come out of selection phase, or official runs stay shut.
+    await admin.post('/api/admin/window', { which: 'selection', value: null });
+    const back = await admin.get('/api/admin/overview');
+    check(
+      'the league returns to taking official runs',
+      back.body.league?.phase === 'official',
+      back.body.league?.phase,
+    );
+
+    const them = await new Client().signIn(names[3], PINS[names[3]]);
+    const rerun = await them.post('/api/official/start');
+    check('the reset manager can actually run again', rerun.status === 200, `got ${rerun.status}`);
+    const redone = await them.post('/api/official/complete', { score: 2222 });
+    check('and lock a new score', redone.status === 200 && redone.body.score === 2222);
+    check(
+      'which completes the set again and reopens selection',
+      redone.body.allRunsComplete === true,
+      JSON.stringify(redone.body),
+    );
   }
 
   console.log('\nA reset cannot corrupt a draft already under way');

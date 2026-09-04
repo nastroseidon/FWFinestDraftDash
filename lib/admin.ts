@@ -62,8 +62,17 @@ export type AdminOverview = {
 };
 
 export async function adminOverview(): Promise<AdminOverview> {
-  const settings = await loadSettings();
-  const phase = phaseFor(settings);
+  let settings = await loadSettings();
+  let phase = phaseFor(settings);
+
+  // Rankings are otherwise frozen lazily, by the first player to open their
+  // draft page. The commissioner should not have to wait on that: opening the
+  // dashboard once selection is live is reason enough to settle the order.
+  if (phase === 'selection') {
+    await ensureRankings();
+    settings = await loadSettings();
+    phase = phaseFor(settings);
+  }
 
   const members = await query<AdminMember>(`
     select id, display_name, team_name, is_admin, practice_best,
@@ -156,7 +165,17 @@ export async function resetOfficialAttempt(memberId: string): Promise<ResetResul
     // Clear every priority and unfreeze, so the next status call ranks again
     // from scratch with this manager's new result included.
     await c.query('update league_members set selection_priority = null');
-    await c.query('update league_settings set rankings_frozen_at = null where id = 1');
+
+    // Also retract the completion stamp. Without this the league stays in
+    // selection phase, official runs stay closed, and the manager who was just
+    // reset cannot actually run again, which makes the reset meaningless.
+    await c.query(`
+      update league_settings
+         set rankings_frozen_at = null,
+             all_runs_complete_at = null,
+             completion_notified_at = null
+       where id = 1
+    `);
 
     return { ok: true } as const;
   });
