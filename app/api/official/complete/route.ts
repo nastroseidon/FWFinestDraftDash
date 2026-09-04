@@ -1,5 +1,9 @@
 import { currentMember, fail, json, parseScore, readJson } from '@/lib/api';
-import { completeOfficialRun } from '@/lib/members';
+import {
+  completeOfficialRun,
+  markAllRunsCompleteIfDone,
+  notifyCommissionerOnce,
+} from '@/lib/members';
 
 /** Writes the official score once. After this it is locked. */
 export async function POST(req: Request) {
@@ -18,5 +22,13 @@ export async function POST(req: Request) {
     return fail('You have not started an official run.', 409);
   }
 
-  return json({ ok: true, score: result.score, alreadyLocked: false });
+  // If that was the last one, selection can open immediately.
+  const wasLast = await markAllRunsCompleteIfDone();
+  if (wasLast) {
+    const url = new URL(req.url);
+    // Email failure must never fail the request that locked a score.
+    await notifyCommissionerOnce(`${url.protocol}//${url.host}`);
+  }
+
+  return json({ ok: true, score: result.score, alreadyLocked: false, allRunsComplete: wasLast });
 }

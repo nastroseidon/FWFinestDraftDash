@@ -1,6 +1,7 @@
 import { PoolClient } from 'pg';
 import { query, transaction } from './db';
 import { LeagueSettings, loadSettings, phaseFor } from './phase';
+import { releaseRevealIfComplete } from './reveal';
 
 /**
  * Draft position selection.
@@ -109,7 +110,7 @@ export async function draftStatus(memberId: string): Promise<DraftStatus> {
   )[0];
 
   // Before selection opens there is nothing to say beyond their own score.
-  if (phase === 'pre' || phase === 'official' || phase === 'ranking') {
+  if (phase === 'official' || phase === 'ranking') {
     return {
       ...base,
       officialScore: me?.official_score ?? null,
@@ -177,6 +178,14 @@ export type ClaimResult =
  * on selected_draft_slot is the backstop if that reasoning is ever wrong.
  */
 export async function claimSlot(memberId: string, slot: number): Promise<ClaimResult> {
+  const result = await claimSlotInner(memberId, slot);
+  // The last pick opens the draft order to the whole league, with no further
+  // action needed from the commissioner.
+  if (result.ok) await releaseRevealIfComplete();
+  return result;
+}
+
+async function claimSlotInner(memberId: string, slot: number): Promise<ClaimResult> {
   const settings = await loadSettings();
   if (phaseFor(settings) !== 'selection') return { ok: false, reason: 'not_open' };
   if (!Number.isInteger(slot) || slot < 1 || slot > settings.league_size) {

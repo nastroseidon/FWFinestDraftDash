@@ -13,7 +13,7 @@ Target deadline: 7 September 2026, official runs open at midnight.
 | 2 | Retro arcade polish | Done, pushed (`b9ae3fb`) |
 | 3 | Backend, manager access, one official attempt | Done, pushed (`4087dd5`) |
 | 4 | Draft position selection | Done (`npm run test:draft`) |
-| 5 | Commissioner dashboard and final reveal | Not started |
+| 5 | Commissioner dashboard and final reveal | Done (`npm run test:admin`) |
 | 6 | PWA, deploy, production config | Deployed to Vercel; PWA and polish outstanding |
 
 Everything below Phase 3 works locally against a real Postgres. Nothing is
@@ -193,6 +193,55 @@ bug for Phase 5, where a commissioner reset means re-ranking. Fixed by clearing
 priorities before reassigning, and the test now asserts the request succeeded
 rather than only that the order held.
 
+## The schedule
+
+Reworked from the original spec after the league decided practice should run
+all weekend rather than everything waiting for one day.
+
+| Window | Rule |
+|---|---|
+| Now to Monday 12:00 AM | Practice and official runs both available |
+| Monday 12:00 AM | Practice closes. Only the official run remains |
+| Monday 5:00 PM | Official runs close. Anyone who never ran scores zero |
+| All runs complete | Selection opens immediately, without waiting for 5:00 PM |
+| Monday 6:00 PM | Selection closes |
+
+Selection no longer waits on a wall clock. The moment every manager has a
+locked score there is nothing left to wait for, so the draft can start early.
+
+## Phase 5: commissioner dashboard and final reveal
+
+`/admin`, reachable only by the manager flagged `admin` in the roster. Shows
+every manager's practice best, official score, run state, rank and draft slot,
+plus who is on the clock. Controls: force either window open or shut, reset one
+manager's official run, assign a draft position by hand, seal or release the
+reveal, and wipe all play data for testing.
+
+A normal manager gets a 404 from every admin endpoint, with a response shaped
+like any other refusal so nothing hints that an admin area exists.
+
+**The draft order publishes itself.** The moment the last position is taken,
+whether a manager claimed it or the commissioner assigned it, the full order
+opens to the whole league. No commissioner action required.
+
+The reveal animates from the last position up to the first, and can be skipped
+to a static board. Each row carries the draft position, the manager, their
+official score, and their Draft Dash finishing rank, which is what shows that a
+top score does not have to mean a top pick.
+
+### Verification
+
+`npm run test:admin` runs 61 tests, `npm run test:schedule` another 24.
+
+Mutation tested, each confirmed to break the suite before being reverted:
+removing the admin gate, removing the reveal seal, and letting the reveal open
+before every pick is in.
+
+Two bugs found this way rather than by reading. The first was a schedule
+constraint that made an assigned zero impossible. The second was `reset-league`
+failing to clear the completion stamps, which would have left the league stuck
+in selection phase forever after a test reset, with no way back short of SQL.
+
 ## Project layout
 
 ```
@@ -241,7 +290,9 @@ scripts/
 | `npm run db:prune` | List members not in the roster, `-- --yes` to delete |
 | `npm run test:api` | 37 integration tests, dev server must be running |
 | `npm run test:draft` | 50 draft selection tests, dev server must be running |
-| `npm test` | Both suites |
+| `npm run test:admin` | 61 commissioner and reveal tests |
+| `npm run test:schedule` | 24 schedule and completion tests |
+| `npm test` | All four suites, 173 tests |
 
 ## Known limitations
 

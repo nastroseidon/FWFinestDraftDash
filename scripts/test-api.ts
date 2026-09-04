@@ -136,16 +136,22 @@ async function main() {
     const c = new Client();
     await c.post('/api/login', { name: P1.name, pin: P1.pin });
 
-    await setOfficialWindow(null); // follow the schedule; the window is in the future
-    const early = await c.post('/api/official/start');
-    check('official run refused before the window', early.status === 409, `got ${early.status}`);
+    // Official runs are open from the moment the league goes live, so the
+    // interesting case is the commissioner shutting the window.
+    await setOfficialWindow(null);
+    const open = await c.get('/api/session');
+    check('phase is official on the schedule', open.body.league?.phase === 'official',
+      open.body.league?.phase);
+    check('an official run is offered', open.body.league?.officialAvailable === true);
 
-    const session = await c.get('/api/session');
-    check('phase is pre before the window', session.body.league?.phase === 'pre');
-    check(
-      'official is not offered before the window',
-      session.body.league?.officialAvailable === false,
-    );
+    await setOfficialWindow(false);
+    const shut = await c.post('/api/official/start');
+    check('a forced-shut window refuses a run', shut.status === 409, `got ${shut.status}`);
+
+    const shutSession = await c.get('/api/session');
+    check('and stops offering one', shutSession.body.league?.officialAvailable === false);
+
+    await setOfficialWindow(null);
   }
 
   console.log('\nOne attempt, no restarts');

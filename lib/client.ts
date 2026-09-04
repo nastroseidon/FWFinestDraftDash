@@ -1,6 +1,6 @@
 'use client';
 
-export type Phase = 'pre' | 'official' | 'ranking' | 'selection' | 'complete';
+export type Phase = 'official' | 'ranking' | 'selection' | 'complete';
 
 export type DraftStatus = {
   phase: Phase;
@@ -11,6 +11,56 @@ export type DraftStatus = {
   leagueSize: number;
   selectionComplete: boolean;
 };
+
+export type AdminMember = {
+  id: string;
+  display_name: string;
+  team_name: string | null;
+  is_admin: boolean;
+  practice_best: number;
+  official_started_at: string | null;
+  official_completed_at: string | null;
+  official_score: number | null;
+  selection_priority: number | null;
+  selected_draft_slot: number | null;
+  abandoned: boolean;
+  never_ran: boolean;
+};
+
+export type AdminOverview = {
+  league: {
+    name: string;
+    timezone: string;
+    phase: Phase;
+    leagueSize: number;
+    serverNow: string;
+    officialOpenAt: string;
+    officialCloseAt: string;
+    selectionOpenAt: string;
+    selectionCloseAt: string;
+    officialOpenOverride: boolean | null;
+    selectionOpenOverride: boolean | null;
+    rankingsFrozen: boolean;
+    revealReleased: boolean;
+  };
+  members: AdminMember[];
+  onTheClock: { id: string; display_name: string } | null;
+  counts: { completed: number; abandoned: number; neverRan: number; slotsTaken: number };
+  takenSlots: number[];
+};
+
+export type RevealRow = {
+  slot: number;
+  manager: string;
+  team: string | null;
+  score: number;
+  rank: number;
+  completed: boolean;
+};
+
+export type RevealState =
+  | { released: false }
+  | { released: true; leagueName: string; order: RevealRow[] };
 
 export type SessionState =
   | { signedIn: false }
@@ -32,11 +82,14 @@ export type SessionState =
         timezone: string;
         phase: Phase;
         officialAvailable: boolean;
+        practiceOpen: boolean;
         officialSeed: number;
-        msUntilOfficialOpen: number | null;
-        officialOpenAt: string;
+        msUntilPracticeCloses: number | null;
+        msUntilOfficialCloses: number | null;
+        practiceCloseAt: string;
         officialCloseAt: string;
-        selectionOpenAt: string;
+        allRunsComplete: boolean;
+        revealAvailable: boolean;
         serverNow: string;
       };
     };
@@ -65,6 +118,19 @@ export const api = {
     call<{ score: number; alreadyLocked: boolean }>('/api/official/complete', { score }),
   draftStatus: () => call<DraftStatus>('/api/draft/status'),
   claimSlot: (slot: number) => call<{ ok: true; slot: number }>('/api/draft/claim', { slot }),
+  reveal: () => call<RevealState>('/api/reveal'),
+
+  admin: {
+    overview: () => call<AdminOverview>('/api/admin/overview'),
+    setWindow: (which: 'official' | 'selection', value: boolean | null) =>
+      call<{ ok: true }>('/api/admin/window', { which, value }),
+    resetAttempt: (memberId: string) =>
+      call<{ ok: true }>('/api/admin/reset-attempt', { memberId }),
+    assignSlot: (memberId: string, slot: number) =>
+      call<{ ok: true }>('/api/admin/assign-slot', { memberId, slot }),
+    setReveal: (released: boolean) => call<{ ok: true }>('/api/admin/reveal', { released }),
+    resetLeague: () => call<{ ok: true }>('/api/admin/reset-league', { confirm: 'RESET' }),
+  },
 };
 
 /** Human countdown, e.g. "2d 04:31:07". */

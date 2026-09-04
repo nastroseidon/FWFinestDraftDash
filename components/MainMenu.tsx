@@ -8,6 +8,7 @@ type Props = {
   onPractice: () => void;
   onOfficial: () => void;
   onDraft: () => void;
+  onReveal: () => void;
   onSignOut: () => void;
 };
 
@@ -16,19 +17,23 @@ export default function MainMenu({
   onPractice,
   onOfficial,
   onDraft,
+  onReveal,
   onSignOut,
 }: Props) {
   const { member, league } = session;
-  const countdown = useCountdown(league.msUntilOfficialOpen);
+
+  // Practice ends before the official deadline, so it is the one to show.
+  const practiceLeft = useCountdown(league.msUntilPracticeCloses);
+  const officialLeft = useCountdown(league.msUntilOfficialCloses);
 
   const officialLabel = (() => {
     if (member.officialCompleted) return 'SCORE LOCKED';
-    if (league.phase === 'pre') return 'OFFICIAL RUN LOCKED';
-    if (league.phase === 'official') {
-      return member.officialStarted ? 'ATTEMPT SPENT' : 'OFFICIAL RUN';
-    }
+    if (member.officialStarted) return 'ATTEMPT SPENT';
+    if (league.officialAvailable) return 'OFFICIAL RUN';
     return 'OFFICIAL RUNS CLOSED';
   })();
+
+  const revealReady = league.revealAvailable;
 
   return (
     <main className="app">
@@ -45,9 +50,10 @@ export default function MainMenu({
           {member.teamName ? ` — ${member.teamName.toUpperCase()}` : ''}
         </p>
 
-        <button className="btn" onClick={onPractice}>
-          PRACTICE
+        <button className="btn" disabled={!league.practiceOpen} onClick={onPractice}>
+          {league.practiceOpen ? 'PRACTICE' : 'PRACTICE CLOSED'}
         </button>
+
         <button
           className={league.officialAvailable ? 'btn danger' : 'btn secondary'}
           disabled={!league.officialAvailable}
@@ -56,19 +62,14 @@ export default function MainMenu({
           {officialLabel}
         </button>
 
-        <button
-          className={league.phase === 'selection' ? 'btn danger' : 'btn secondary'}
-          onClick={onDraft}
-        >
+        <button className="btn secondary" onClick={onDraft}>
           DRAFT STATUS
         </button>
 
-        {league.phase === 'pre' && countdown !== null ? (
-          <p className="meta">
-            OFFICIAL RUNS OPEN IN
-            <br />
-            <span className="countdown">{formatCountdown(countdown)}</span>
-          </p>
+        {revealReady ? (
+          <button className="btn danger" onClick={onReveal}>
+            DRAFT ORDER
+          </button>
         ) : null}
 
         {member.officialCompleted ? (
@@ -78,8 +79,30 @@ export default function MainMenu({
             <span className="countdown">
               {(member.officialScore ?? 0).toLocaleString('en-US')} YARDS
             </span>
+            <br />
+            SCORE LOCKED. NO APPEALS.
           </p>
-        ) : null}
+        ) : (
+          <p className="meta">
+            {league.practiceOpen && practiceLeft !== null ? (
+              <>
+                PRACTICE ENDS IN
+                <br />
+                <span className="countdown">{formatCountdown(practiceLeft)}</span>
+                <br />
+              </>
+            ) : null}
+            {officialLeft !== null ? (
+              <>
+                OFFICIAL RUN DUE IN
+                <br />
+                <span className="countdown">{formatCountdown(officialLeft)}</span>
+              </>
+            ) : (
+              'OFFICIAL RUNS ARE CLOSED.'
+            )}
+          </p>
+        )}
 
         <p className="meta">
           PRACTICE BEST — {member.practiceBest.toLocaleString('en-US')} YARDS
@@ -93,18 +116,20 @@ export default function MainMenu({
   );
 }
 
-/** Ticks locally from the server's value, so no clock skew leaks in. */
+/**
+ * Ticks locally down from the server's value, so no browser clock skew leaks in.
+ * Keyed on the server value, so a fresh session resets the countdown.
+ */
 function useCountdown(initialMs: number | null): number | null {
-  const [ms, setMs] = useState(initialMs);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     if (initialMs === null) return;
     const startedAt = Date.now();
-    const id = setInterval(() => {
-      setMs(Math.max(0, initialMs - (Date.now() - startedAt)));
-    }, 1000);
+    const id = setInterval(() => setElapsed(Date.now() - startedAt), 1000);
     return () => clearInterval(id);
   }, [initialMs]);
 
-  return ms;
+  if (initialMs === null) return null;
+  return Math.max(0, initialMs - elapsed);
 }

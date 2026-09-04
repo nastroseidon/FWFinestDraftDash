@@ -61,7 +61,11 @@ export default function DraftScreen({ onMenu }: { onMenu: () => void }) {
         <p className="label">DRAFT POSITION</p>
         <div className="slotBig">{status.selectedSlot}</div>
         <p className="locked">LOCKED IN</p>
-        <p className="meta">Your selection has been recorded.</p>
+        <p className="meta">
+          {status.selectionComplete
+            ? 'Every pick is in. The full draft order is on the main menu.'
+            : 'Your selection has been recorded.'}
+        </p>
         <button className="btn secondary" onClick={onMenu}>
           MAIN MENU
         </button>
@@ -70,7 +74,7 @@ export default function DraftScreen({ onMenu }: { onMenu: () => void }) {
   }
 
   // Selection has not opened yet.
-  if (status.phase === 'pre' || status.phase === 'official' || status.phase === 'ranking') {
+  if (status.phase === 'official' || status.phase === 'ranking') {
     return (
       <Shell>
         <h1 className="headline">DRAFT STATUS</h1>
@@ -89,8 +93,8 @@ export default function DraftScreen({ onMenu }: { onMenu: () => void }) {
         )}
         <p className="meta">
           {status.phase === 'ranking'
-            ? 'Official runs are closed. Draft-position selection begins at 5:00 PM.'
-            : 'Draft-position selection begins at 5:00 PM on September 7.'}
+            ? 'Official runs are closed. Selection begins shortly.'
+            : 'Selection begins once every manager has completed their official run.'}
         </p>
         <button className="btn secondary" onClick={onMenu}>
           MAIN MENU

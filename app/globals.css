@@ -350,6 +350,310 @@ body::after {
   white-space: pre-line;
 }
 
+/* --- Commissioner dashboard --- */
+/* Deliberately plainer than the game: this is a control panel read under
+   pressure, not a piece of arcade cabinet art. */
+
+.adminWrap {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 20px 16px 80px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fwf-cream);
+}
+
+html:has(.adminWrap),
+body:has(.adminWrap) {
+  overflow: auto;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.adminTitle {
+  margin: 0 0 4px;
+  font-family: var(--arcade);
+  font-size: 18px;
+  color: var(--fwf-gold);
+}
+
+.adminNote {
+  margin: 0 0 18px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.adminNote a {
+  color: var(--fwf-gold);
+}
+
+.adminError {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  color: var(--fwf-cream);
+  background: rgba(224, 69, 58, 0.25);
+  border-left: 4px solid var(--fwf-red);
+}
+
+.adminCard {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(245, 241, 230, 0.14);
+}
+
+.adminCard.danger {
+  border-color: rgba(224, 69, 58, 0.5);
+}
+
+.adminCard h2 {
+  margin: 0 0 12px;
+  font-family: var(--arcade);
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--fwf-gold);
+}
+
+.adminBig {
+  margin: 0 0 12px;
+  font-family: var(--arcade);
+  font-size: 20px;
+  color: var(--fwf-cream);
+}
+
+.adminGrid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 18px;
+  margin: 0;
+}
+
+.adminGrid dt {
+  opacity: 0.6;
+}
+
+.adminGrid dd {
+  margin: 0;
+}
+
+.adminGrid dd.warn,
+.adminTable td.warn {
+  color: var(--fwf-gold);
+  font-weight: 700;
+}
+
+.adminRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-top: 1px solid rgba(245, 241, 230, 0.1);
+}
+
+.adminRowLabel em {
+  margin-left: 10px;
+  font-style: normal;
+  opacity: 0.55;
+}
+
+.adminBtns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.aBtn {
+  display: inline-block;
+  padding: 7px 12px;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-decoration: none;
+  color: var(--fwf-cream);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(245, 241, 230, 0.3);
+  cursor: pointer;
+}
+
+.aBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.aBtn.on {
+  color: var(--fwf-navy);
+  background: var(--fwf-gold);
+  border-color: var(--fwf-gold);
+  font-weight: 700;
+}
+
+.aBtn.big {
+  padding: 10px 18px;
+  font-size: 12px;
+}
+
+.aBtn.tiny {
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.aBtn.danger {
+  color: var(--fwf-cream);
+  background: rgba(224, 69, 58, 0.3);
+  border-color: var(--fwf-red);
+}
+
+.aBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.adminTableWrap {
+  overflow-x: auto;
+}
+
+.adminTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.adminTable th {
+  padding: 6px 10px 6px 0;
+  text-align: left;
+  font-weight: 400;
+  opacity: 0.55;
+  border-bottom: 1px solid rgba(245, 241, 230, 0.2);
+}
+
+.adminTable td {
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid rgba(245, 241, 230, 0.08);
+}
+
+.adminTable tr.onClock td {
+  background: rgba(242, 192, 39, 0.12);
+}
+
+.adminTable tr.onClock td:first-child::before {
+  content: '> ';
+  color: var(--fwf-gold);
+}
+
+.adminRowActions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.adminRowActions select {
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 10px;
+  color: var(--fwf-cream);
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(245, 241, 230, 0.3);
+}
+
+/* --- Final reveal --- */
+
+.app.scrollable {
+  position: static;
+  min-height: 100%;
+  overflow-y: auto;
+  padding-bottom: 60px;
+}
+
+html:has(.app.scrollable),
+body:has(.app.scrollable) {
+  overflow: auto;
+}
+
+.revealTitle {
+  font-size: clamp(18px, 6.5vw, 26px);
+  line-height: 1.5;
+  margin: 0 0 22px;
+  color: var(--fwf-gold);
+  text-shadow: 3px 3px 0 var(--fwf-blue), 6px 6px 0 rgba(0, 0, 0, 0.45);
+}
+
+.revealList {
+  list-style: none;
+  margin: 26px 0 20px;
+  padding: 0;
+}
+
+.revealRow {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 12px 10px;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.35);
+  border: 3px solid rgba(245, 241, 230, 0.18);
+  /* Hidden until its turn, without the list reflowing as each lands. */
+  opacity: 0;
+  transform: translateY(10px);
+  visibility: hidden;
+}
+
+.revealRow.in {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  border-color: var(--fwf-gold);
+  animation: slam 380ms steps(4);
+}
+
+@keyframes slam {
+  0% {
+    transform: scale(1.35);
+    filter: brightness(2.2);
+  }
+  100% {
+    transform: scale(1);
+    filter: none;
+  }
+}
+
+.revealSlot {
+  font-size: 22px;
+  color: var(--fwf-gold);
+  text-align: center;
+}
+
+.revealWho strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 1px;
+}
+
+.revealWho em,
+.revealScore em {
+  display: block;
+  margin-top: 5px;
+  font-size: 8px;
+  font-style: normal;
+  opacity: 0.6;
+}
+
+.revealScore {
+  font-size: 13px;
+  color: var(--fwf-green);
+  text-align: right;
+}
+
+.revealScore em {
+  color: var(--fwf-cream);
+}
+
 /* --- Mute --- */
 
 .muteBtn {

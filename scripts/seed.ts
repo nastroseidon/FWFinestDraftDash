@@ -66,12 +66,17 @@ async function main() {
   await query(
     `insert into league_settings (
        id, league_name, timezone,
-       official_open_at, official_close_at, selection_open_at, selection_close_at,
+       official_open_at, official_close_at, practice_close_at,
+       selection_open_at, selection_close_at,
        official_seed, league_size
      ) values (
        1, 'Fort Wayne Finest', 'America/Indiana/Indianapolis',
-       timestamptz '2026-09-07 00:00:00 America/Indiana/Indianapolis',
+       -- Official runs are available from the moment the league goes live.
+       timestamptz '2026-09-04 00:00:00 America/Indiana/Indianapolis',
        timestamptz '2026-09-07 17:00:00 America/Indiana/Indianapolis',
+       -- Practice stops when Monday starts. After that only the official run.
+       timestamptz '2026-09-07 00:00:00 America/Indiana/Indianapolis',
+       -- Selection opens here at the latest, or earlier once everyone has run.
        timestamptz '2026-09-07 17:00:00 America/Indiana/Indianapolis',
        timestamptz '2026-09-07 18:00:00 America/Indiana/Indianapolis',
        $1, $2
@@ -79,9 +84,11 @@ async function main() {
      on conflict (id) do update
        set league_name = excluded.league_name,
            timezone    = excluded.timezone,
-           -- Keeps league_size in step when the roster changes. The schedule is
-           -- deliberately left alone so re-seeding cannot clobber dates the
-           -- commissioner has already adjusted.
+           official_open_at  = excluded.official_open_at,
+           official_close_at = excluded.official_close_at,
+           practice_close_at = excluded.practice_close_at,
+           selection_open_at = excluded.selection_open_at,
+           selection_close_at = excluded.selection_close_at,
            league_size = excluded.league_size`,
     [20260907, players().length],
   );

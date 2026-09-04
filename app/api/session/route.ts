@@ -1,5 +1,11 @@
 import { currentMember, json } from '@/lib/api';
-import { loadSettings, msUntilOfficialOpen, phaseFor } from '@/lib/phase';
+import {
+  loadSettings,
+  msUntilOfficialCloses,
+  msUntilPracticeCloses,
+  phaseFor,
+  practiceOpen,
+} from '@/lib/phase';
 
 /**
  * Everything a player is allowed to know about themselves and the clock.
@@ -14,6 +20,7 @@ export async function GET() {
 
   const officialAvailable =
     phase === 'official' && !member.official_started_at && !member.official_completed_at;
+  const canPractice = practiceOpen(settings);
 
   return json({
     signedIn: true,
@@ -34,11 +41,14 @@ export async function GET() {
       timezone: settings.timezone,
       phase,
       officialAvailable,
+      practiceOpen: canPractice,
       officialSeed: Number(settings.official_seed),
-      msUntilOfficialOpen: msUntilOfficialOpen(settings),
-      officialOpenAt: settings.official_open_at,
+      msUntilPracticeCloses: msUntilPracticeCloses(settings),
+      msUntilOfficialCloses: msUntilOfficialCloses(settings),
+      practiceCloseAt: settings.practice_close_at,
       officialCloseAt: settings.official_close_at,
-      selectionOpenAt: settings.selection_open_at,
+      allRunsComplete: settings.all_runs_complete_at !== null,
+      revealAvailable: settings.reveal_released,
       serverNow: settings.server_now,
     },
   });

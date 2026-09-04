@@ -8,6 +8,7 @@ import MuteButton from '@/components/MuteButton';
 import OfficialWarning from '@/components/OfficialWarning';
 import DraftScreen from '@/components/DraftScreen';
 import ResultScreen from '@/components/ResultScreen';
+import RevealScreen from '@/components/RevealScreen';
 import { api, type SessionState } from '@/lib/client';
 import { sfx } from '@/game/audio';
 import { PRACTICE_SEED } from '@/game/config';
@@ -24,7 +25,8 @@ type Screen =
   | 'officialWarning'
   | 'official'
   | 'officialResult'
-  | 'draft';
+  | 'draft'
+  | 'reveal';
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>('loading');
@@ -184,6 +186,15 @@ export default function Home() {
     );
   }
 
+  if (screen === 'reveal') {
+    return (
+      <>
+        <RevealScreen onMenu={() => { void refresh(); setScreen('menu'); }} />
+        <MuteButton />
+      </>
+    );
+  }
+
   if (screen === 'officialResult') {
     return (
       <>
@@ -201,6 +212,7 @@ export default function Home() {
         onPractice={startPractice}
         onOfficial={() => setScreen('officialWarning')}
         onDraft={() => setScreen('draft')}
+        onReveal={() => setScreen('reveal')}
         onSignOut={async () => {
           await api.logout();
           setSession({ signedIn: false });

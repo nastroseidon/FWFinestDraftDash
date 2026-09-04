@@ -1,8 +1,7 @@
 import { query } from './db';
 
 export type Phase =
-  | 'pre'        // practice only; official runs have not opened
-  | 'official'   // official run window is open
+  | 'official'   // official runs may be taken
   | 'ranking'    // runs closed, selection not yet open
   | 'selection'  // draft-position selection window
   | 'complete';  // selection window has closed
@@ -12,8 +11,14 @@ export type LeagueSettings = {
   timezone: string;
   official_open_at: Date;
   official_close_at: Date;
+  /** After this, practice is gone and only the official run remains. */
+  practice_close_at: Date;
   selection_open_at: Date;
   selection_close_at: Date;
+  /** Set when the last official run lands. Lets selection open early. */
+  all_runs_complete_at: Date | null;
+  completion_notified_at: Date | null;
+  rankings_frozen_at: Date | null;
   official_seed: string;
   league_size: number;
   official_open_override: boolean | null;
@@ -39,22 +44,40 @@ export async function loadSettings(): Promise<LeagueSettings> {
 export function phaseFor(s: LeagueSettings): Phase {
   const now = s.server_now.getTime();
 
+  // Selection is checked first. Once every manager has a locked score there is
+  // nothing left to wait for, so it can open well before its scheduled time.
+  const selectionOpen =
+    s.selection_open_override ??
+    ((s.all_runs_complete_at !== null || now >= s.selection_open_at.getTime()) &&
+      now < s.selection_close_at.getTime());
+
+  if (selectionOpen) return 'selection';
+
   const officialOpen =
     s.official_open_override ??
     (now >= s.official_open_at.getTime() && now < s.official_close_at.getTime());
 
   if (officialOpen) return 'official';
 
-  const selectionOpen =
-    s.selection_open_override ??
-    (now >= s.selection_open_at.getTime() && now < s.selection_close_at.getTime());
+  if (now >= s.selection_close_at.getTime()) return 'complete';
+  return 'ranking';
+}
 
-  if (selectionOpen) return 'selection';
+/** Practice has its own deadline, independent of the phase. */
+export function practiceOpen(s: LeagueSettings): boolean {
+  return s.server_now.getTime() < s.practice_close_at.getTime();
+}
 
-  if (now < s.official_open_at.getTime()) return 'pre';
-  if (now < s.selection_open_at.getTime()) return 'ranking';
-  if (now < s.selection_close_at.getTime()) return 'selection';
-  return 'complete';
+/** Milliseconds until practice closes, or null once it has. */
+export function msUntilPracticeCloses(s: LeagueSettings): number | null {
+  const delta = s.practice_close_at.getTime() - s.server_now.getTime();
+  return delta > 0 ? delta : null;
+}
+
+/** Milliseconds until official runs must be finished. */
+export function msUntilOfficialCloses(s: LeagueSettings): number | null {
+  const delta = s.official_close_at.getTime() - s.server_now.getTime();
+  return delta > 0 ? delta : null;
 }
 
 /** Milliseconds until official runs open, or null if that moment has passed. */

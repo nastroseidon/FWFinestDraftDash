@@ -1,5 +1,6 @@
 import { PoolClient } from 'pg';
 import { query, transaction } from './db';
+import { sendAllRunsCompleteEmail } from './notify';
 
 export type Member = {
   id: string;
@@ -147,4 +148,57 @@ export async function completeOfficialRun(
 
     return { ok: true, score } as const;
   });
+}
+
+/**
+ * Stamps the moment the last official run lands, which is what lets selection
+ * open early. Returns true only on the transition, so the email fires once.
+ *
+ * The stamp is written under a conditional update rather than a read then
+ * write, so two managers finishing at the same instant cannot both claim to be
+ * the last one in.
+ */
+export async function markAllRunsCompleteIfDone(): Promise<boolean> {
+  const rows = await query<{ stamped: boolean }>(`
+    update league_settings
+       set all_runs_complete_at = now()
+     where id = 1
+       and all_runs_complete_at is null
+       and not exists (
+         select 1 from league_members where official_completed_at is null
+       )
+    returning true as stamped
+  `);
+  return rows.length > 0;
+}
+
+/** Best effort, and only ever once. Never throws into the request path. */
+export async function notifyCommissionerOnce(baseUrl: string): Promise<void> {
+  const claimed = await query<{ id: number }>(`
+    update league_settings
+       set completion_notified_at = now()
+     where id = 1
+       and all_runs_complete_at is not null
+       and completion_notified_at is null
+    returning id
+  `);
+  if (claimed.length === 0) return;
+
+  const info = await query<{ league_name: string; total: string }>(`
+    select (select league_name from league_settings where id = 1) as league_name,
+           (select count(*)::text from league_members) as total
+  `);
+
+  const result = await sendAllRunsCompleteEmail({
+    leagueName: info[0].league_name,
+    completed: Number(info[0].total),
+    total: Number(info[0].total),
+    adminUrl: `${baseUrl}/admin`,
+  });
+
+  if (!result.sent) {
+    console.error('[draft-dash] commissioner email not sent:', result.reason);
+    // Let it be retried, rather than silently swallowing the only notification.
+    await query('update league_settings set completion_notified_at = null where id = 1');
+  }
 }
