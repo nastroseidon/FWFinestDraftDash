@@ -5,6 +5,21 @@
  * Run with: npm run test:api   (dev server must be up on BASE)
  */
 import { pool, query } from '../lib/db';
+import { loadPins } from './pins';
+import { players } from './roster';
+
+// Tests run against whatever roster is configured, so swapping the league does
+// not break them.
+const PINS = loadPins();
+const ROSTER = players();
+const P = (i: number) => {
+  const m = ROSTER[i];
+  if (!m) throw new Error(`Roster has no player at index ${i}. Need at least 5.`);
+  const pin = PINS[m.name];
+  if (!pin) throw new Error(`No access code for ${m.name}. Run npm run db:seed.`);
+  return { name: m.name, pin };
+};
+const [P1, P2, P3, P4, P5] = [0, 1, 2, 3, 4].map(P);
 
 const BASE = process.env.TEST_BASE ?? 'http://localhost:3000';
 
@@ -72,28 +87,28 @@ async function setOfficialWindow(open: boolean | null) {
 async function main() {
   console.log(`Testing ${BASE}\n`);
 
-  await resetMember('Manager 1');
-  await resetMember('Manager 2');
+  await resetMember(P1.name);
+  await resetMember(P2.name);
   await setOfficialWindow(null);
 
   console.log('Authentication');
   {
     const c = new Client();
-    const bad = await c.post('/api/login', { name: 'Manager 1', pin: '9999' });
+    const bad = await c.post('/api/login', { name: P1.name, pin: 'definitely-wrong' });
     check('wrong PIN is rejected', bad.status === 401, `got ${bad.status}`);
 
-    const unknown = await c.post('/api/login', { name: 'Nobody', pin: '1001' });
+    const unknown = await c.post('/api/login', { name: 'Nobody At All', pin: P1.pin });
     check('unknown manager is rejected', unknown.status === 401, `got ${unknown.status}`);
     check(
       'unknown manager and wrong PIN give the same message',
       unknown.body.error === bad.body.error,
     );
 
-    const ok = await c.post('/api/login', { name: 'manager 1', pin: '1001' });
+    const ok = await c.post('/api/login', { name: P1.name.toLowerCase(), pin: P1.pin });
     check('correct PIN signs in, case-insensitively', ok.status === 200, `got ${ok.status}`);
 
     const session = await c.get('/api/session');
-    check('session reports the right manager', session.body.member?.displayName === 'Manager 1');
+    check('session reports the right manager', session.body.member?.displayName === P1.name);
     check('session never leaks the PIN hash', !JSON.stringify(session.body).includes('scrypt$'));
   }
 
@@ -113,7 +128,7 @@ async function main() {
   console.log('\nOfficial window is server-controlled');
   {
     const c = new Client();
-    await c.post('/api/login', { name: 'Manager 1', pin: '1001' });
+    await c.post('/api/login', { name: P1.name, pin: P1.pin });
 
     await setOfficialWindow(null); // follow the schedule; the window is in the future
     const early = await c.post('/api/official/start');
@@ -131,7 +146,7 @@ async function main() {
   {
     await setOfficialWindow(true);
     const phone = new Client();
-    await phone.post('/api/login', { name: 'Manager 1', pin: '1001' });
+    await phone.post('/api/login', { name: P1.name, pin: P1.pin });
 
     const first = await phone.post('/api/official/start');
     check('first start succeeds', first.status === 200, `got ${first.status}`);
@@ -143,7 +158,7 @@ async function main() {
 
     // A different device with the same login must not get a fresh attempt.
     const laptop = new Client();
-    await laptop.post('/api/login', { name: 'Manager 1', pin: '1001' });
+    await laptop.post('/api/login', { name: P1.name, pin: P1.pin });
     const otherDevice = await laptop.post('/api/official/start');
     check('a second device gets no fresh attempt', otherDevice.status === 409);
 
@@ -155,7 +170,8 @@ async function main() {
     check('overwrite attempt is flagged as locked', overwrite.body.alreadyLocked === true);
 
     const stored = await query<{ official_score: number }>(
-      `select official_score from league_members where display_name = 'Manager 1'`,
+      `select official_score from league_members where display_name = $1`,
+      [P1.name],
     );
     check('database holds the first score only', stored[0].official_score === 1438);
 
@@ -165,11 +181,11 @@ async function main() {
 
   console.log('\nConcurrent starts');
   {
-    await resetMember('Manager 2');
+    await resetMember(P2.name);
     const a = new Client();
     const b = new Client();
-    await a.post('/api/login', { name: 'Manager 2', pin: '1002' });
-    await b.post('/api/login', { name: 'Manager 2', pin: '1002' });
+    await a.post('/api/login', { name: P2.name, pin: P2.pin });
+    await b.post('/api/login', { name: P2.name, pin: P2.pin });
 
     const [r1, r2] = await Promise.all([
       a.post('/api/official/start'),
@@ -182,19 +198,19 @@ async function main() {
   console.log('\nPlayers cannot touch each other');
   {
     const c = new Client();
-    await c.post('/api/login', { name: 'Manager 1', pin: '1001' });
+    await c.post('/api/login', { name: P1.name, pin: P1.pin });
     const session = await c.get('/api/session');
     const text = JSON.stringify(session.body);
-    check('session mentions no other manager', !text.includes('Manager 2'));
+    check('session mentions no other manager', !text.includes(P2.name));
     check('session exposes no rank', !/"rank"/.test(text));
     check('session exposes no leaderboard', !/leaderboard/i.test(text));
   }
 
   console.log('\nPractice');
   {
-    await resetMember('Manager 3');
+    await resetMember(P3.name);
     const c = new Client();
-    await c.post('/api/login', { name: 'Manager 3', pin: '1003' });
+    await c.post('/api/login', { name: P3.name, pin: P3.pin });
 
     const first = await c.post('/api/practice', { score: 640 });
     check('practice score is recorded', first.body.practiceBest === 640);
@@ -217,10 +233,10 @@ async function main() {
 
   console.log('\nEvery official run uses the same course');
   {
-    await resetMember('Manager 4');
-    await resetMember('Manager 5');
+    await resetMember(P4.name);
+    await resetMember(P5.name);
     const seeds: number[] = [];
-    for (const [name, pin] of [['Manager 4', '1004'], ['Manager 5', '1005']]) {
+    for (const { name, pin } of [P4, P5]) {
       const c = new Client();
       await c.post('/api/login', { name, pin });
       const r = await c.post('/api/official/start');
@@ -231,8 +247,8 @@ async function main() {
 
   // Leave the league as we found it.
   await setOfficialWindow(null);
-  for (const n of ['Manager 1', 'Manager 2', 'Manager 3', 'Manager 4', 'Manager 5']) {
-    await resetMember(n);
+  for (const p of [P1, P2, P3, P4, P5]) {
+    await resetMember(p.name);
   }
 
   console.log(`\n${passed} passed, ${failures.length} failed`);

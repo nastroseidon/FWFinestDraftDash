@@ -1,35 +1,40 @@
 /**
- * The league roster. This is the one place to edit managers.
+ * The league roster. Names and teams only.
  *
- * PINs are never stored as written: `npm run db:seed` hashes them with scrypt
- * before they reach the database. Re-seeding is safe to repeat and leaves
- * existing scores alone.
+ * There are deliberately NO PINs in this file. The repository is public, so
+ * access codes live in db/pins.local.json, which is gitignored. `npm run db:seed`
+ * reads that file, generates a strong code for anyone missing one, and prints
+ * the list so you can hand them out.
  *
- * `admin: true` grants the commissioner dashboard and does not count toward
- * league size. Keep exactly one.
- *
- * Use six or more characters and mix in letters. There is no login rate
- * limiting yet, and a four digit PIN is only 10,000 guesses.
+ * `admin: true` grants the commissioner dashboard. `plays: false` marks an
+ * account that administers but does not run, and is excluded from league size.
  */
 export type RosterEntry = {
   name: string;
   team?: string;
-  pin: string;
   admin?: boolean;
+  plays?: boolean;
 };
 
 export const MEMBERS: RosterEntry[] = [
-  { name: 'Commissioner', team: 'League Office', pin: '4242', admin: true },
-  { name: 'Manager 1', pin: '1001' },
-  { name: 'Manager 2', pin: '1002' },
-  { name: 'Manager 3', pin: '1003' },
-  { name: 'Manager 4', pin: '1004' },
-  { name: 'Manager 5', pin: '1005' },
-  { name: 'Manager 6', pin: '1006' },
-  { name: 'Manager 7', pin: '1007' },
-  { name: 'Manager 8', pin: '1008' },
-  { name: 'Manager 9', pin: '1009' },
-  { name: 'Manager 10', pin: '1010' },
-  { name: 'Manager 11', pin: '1011' },
-  { name: 'Manager 12', pin: '1012' },
+  // Commissioner account. Administers, does not take a draft slot.
+  { name: 'Commissioner', team: 'League Office', admin: true, plays: false },
+
+  { name: 'Dan' },
+  { name: 'Nikita' },
+  { name: 'Chris' },
+  { name: 'Travis' },
+  { name: 'Mark' },
+  { name: 'Ben' },
+  { name: 'Chad' },
+  { name: 'Colby' },
+  { name: 'Jamaris' },
+  { name: 'Kevin' },
+  { name: 'Ryan' },
+  { name: 'Nicholas' },
 ];
+
+/** Everyone who takes a draft slot. This is what league_size counts. */
+export function players(): RosterEntry[] {
+  return MEMBERS.filter((m) => m.plays !== false);
+}

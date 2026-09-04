@@ -96,8 +96,8 @@ Then seed the league:
 DATABASE_URL="paste-the-connection-string-here" npm run db:seed
 ```
 
-That prints the manager list and PINs. **These are placeholders.** Task 2
-replaces them.
+That prints the manager list and their access codes. These are the real ones,
+read from `db/pins.local.json`. See Task 2.
 
 Passing `DATABASE_URL` on the command line overrides `.env.local`, so this
 touches production and leaves your local database untouched. That is verified
@@ -116,7 +116,7 @@ Open the deployment URL on your phone, in portrait.
 
 | Check | Expected |
 |---|---|
-| Sign in as `Manager 1` PIN `1001` | Reaches the main menu |
+| Sign in as any manager, using the code from the seed output | Reaches the main menu |
 | Main menu | Shows a live countdown to 7 September, midnight |
 | OFFICIAL RUN button | Greyed out and reads OFFICIAL RUN LOCKED |
 | PRACTICE | Plays, and the score sticks after a reload |
@@ -135,114 +135,54 @@ prepare the change.
 
 ---
 
-# Task 2: Replace the placeholder roster
+# Task 2: Roster and access codes
 
-The league is currently seeded with `Manager 1` through `Manager 12` and PINs
-`1001` through `1012`, plus a `Commissioner` account with PIN `4242`.
+**The roster is already in.** All twelve managers are configured and access
+codes are generated. What is left is getting those codes into production and
+handing them out.
 
-## Read this before choosing PINs
+Dan, Nikita, Chris, Travis, Mark, Ben, Chad, Colby, Jamaris, Kevin, Ryan,
+Nicholas. League size 12.
 
-There is no rate limiting on the login endpoint yet. A four digit PIN is 10,000
-guesses, which a determined league member could work through in minutes. In this
-game the payoff for guessing someone's PIN is burning their one official run,
-which is exactly the kind of mischief this league would enjoy.
+## 2.1 How codes are kept out of the public repository
 
-**Use six or more characters and mix in letters.** Something like `k7dragon` or
-`Blitz-91`. They are typed once per device and then the session persists, so
-length costs almost nothing.
+This repository is public, so access codes are never written into it.
 
-Tell me if you would rather I add login rate limiting instead. It is a small
-change and a good idea regardless.
+* `scripts/roster.ts` holds names and teams only. Committed.
+* `db/pins.local.json` holds the codes. Gitignored, permissions `600`.
 
-## 2.1 Choose the option that suits you
+`npm run db:seed` reads that file, generates a strong code for anyone who does
+not have one, and prints the full list. Codes already in the file are kept, so
+re-seeding never locks anyone out. That is verified.
 
-**Option A, send me the roster.** Paste the list here in this format and I will
-make the change, verify it and commit:
+Codes are eight characters from an alphabet with no `i`, `l`, `o`, `0` or `1`,
+so nothing is ambiguous when read off a screen. That is roughly 850 billion
+combinations, which is safe even without login rate limiting.
 
-```
-Display name | Team name | PIN
-Nick Smith   | Team Name | somepin
-```
+## 2.2 Back up db/pins.local.json
 
-Note that display names are what managers type to sign in, so keep them short
-and unambiguous. First names usually work.
+Copy it somewhere safe now, outside the repository folder.
 
-**Option B, edit it yourself.** Continue below.
+If you lose it, the next seed generates fresh codes and overwrites the stored
+hashes, which locks every manager out until you send new codes. Nothing else in
+the app depends on it.
 
-## 2.2 Edit the roster file
+## 2.3 Push the codes to production
 
-Open `scripts/roster.ts`. That file exists only to hold the roster, so it is the
-only thing you edit:
-
-```ts
-export const MEMBERS: RosterEntry[] = [
-  { name: 'Commissioner', team: 'League Office', pin: '4242', admin: true },
-  { name: 'Manager 1', pin: '1001' },
-  ...
-];
-```
-
-Replace it with the real league. Rules:
-
-* `name` is the sign in handle. Case does not matter at sign in.
-* `team` is optional and shown on the main menu.
-* `pin` is never stored as written. It is hashed with scrypt before it touches
-  the database.
-* `admin: true` grants the commissioner dashboard when Phase 5 lands. Keep
-  exactly one, and it does not count toward league size.
-
-Example:
-
-```ts
-export const MEMBERS: RosterEntry[] = [
-  { name: 'Nick', team: 'League Office', pin: 'choose-something', admin: true },
-  { name: 'Dave', team: 'Fort Wayne Fury', pin: 'choose-something' },
-  { name: 'Steve', team: 'Summit City Slingers', pin: 'choose-something' },
-  { name: 'Ryan', team: 'Three Rivers Rush', pin: 'choose-something' },
-];
-```
-
-`league_size` is worked out from the number of non admin managers, so you do not
-set it anywhere. Verified: swapping in a four player roster moved it from 12 to 4.
-
-The seed checks the roster before touching the database and stops with a plain
-message if something is wrong: not exactly one admin, fewer than 4 or more than
-16 players, duplicate names, or a blank name or PIN. It also warns about PINs
-shorter than six characters.
-
-## 2.3 Apply it
-
-Local database first:
+Run this from the same Mac, so production gets the same codes that are in your
+local file:
 
 ```bash
 cd ~/Documents/FWFinestDraftDash
-npm run db:seed
-```
-
-Then production, using the same connection string from Task 1:
-
-```bash
 DATABASE_URL="paste-the-connection-string-here" npm run db:seed
 ```
 
-Re-seeding is safe to repeat. Managers are matched on display name, and their
-scores and practice bests are left alone.
+It prints the table again. Production and local now match.
 
-## 2.4 What re-seeding does not do
+## 2.4 Remove any placeholder accounts
 
-**It does not remove anyone.** Deleting a manager from the roster leaves their
-row in the database. Placeholder accounts left behind could still sign in and
-take a draft slot.
-
-Use `db:prune` to clear them. It shows what it would delete and does nothing
-until you add `--yes`:
-
-```bash
-npm run db:prune
-npm run db:prune -- --yes
-```
-
-Then the same against production:
+Only needed if you seeded production before the real roster landed. `db:prune`
+shows what it would remove and does nothing until you add `--yes`:
 
 ```bash
 DATABASE_URL="paste-the-connection-string-here" npm run db:prune
@@ -253,11 +193,38 @@ It refuses to delete anyone holding an official score or a draft slot, even with
 `--yes`. That guard is tested, so an accidental prune on 7 September cannot
 erase somebody's run.
 
-**Check:** the dry run lists exactly the placeholders and nothing else.
+## 2.5 Hand out the codes
 
-## 2.5 Distribute the PINs
+Each manager needs their own name and code, sent privately. Not in the group
+chat. Signing in is once per device; the session persists after that.
 
-Send each manager their own name and PIN privately. Not in the group chat.
+The message is short:
+
+> Draft Dash: <url>
+> Manager: <their name>
+> Code: <their code from the seed output>
+> One official run on Sunday. Practice as much as you like.
+
+## 2.6 Team names, optional
+
+Nobody has one yet. They show on the main menu and in the final draft order.
+Add them in `scripts/roster.ts`:
+
+```ts
+{ name: 'Dan', team: 'Fort Wayne Fury' },
+```
+
+Then re-seed. Codes and scores are untouched.
+
+## 2.7 About the Commissioner account
+
+There is a separate `Commissioner` login that administers but does not run,
+marked `plays: false`, so it does not take a draft slot and league size stays at
+12.
+
+If you would rather have admin rights on your own player account instead of
+a second login, say so and I will move the flag to `Nicholas`. League size stays
+12 either way.
 
 ---
 

@@ -1,14 +1,16 @@
 /**
  * Seeds league settings and members. Safe to re-run: members are matched on
- * display name and their scores are left alone.
+ * display name and their scores and practice bests are left alone.
  *
- * Edit the roster in scripts/roster.ts, not here.
+ * Edit the roster in scripts/roster.ts. Access codes are generated into
+ * db/pins.local.json, which is gitignored.
  *
  * Run with: npm run db:seed
  */
 import { hashAccessCode } from '../lib/auth';
 import { pool, query } from '../lib/db';
-import { MEMBERS } from './roster';
+import { MEMBERS, players } from './roster';
+import { PINS_PATH, generatePin, loadPins, savePins } from './pins';
 
 /** Catches roster mistakes with a readable message rather than a Postgres dump. */
 function validateRoster() {
@@ -19,17 +21,14 @@ function validateRoster() {
     problems.push(`Expected exactly one admin, found ${admins.length}.`);
   }
 
-  const players = MEMBERS.filter((m) => !m.admin);
-  if (players.length < 4 || players.length > 16) {
-    problems.push(
-      `League size is ${players.length}. It must be between 4 and 16 (admins do not count).`,
-    );
+  const size = players().length;
+  if (size < 4 || size > 16) {
+    problems.push(`League size is ${size}. It must be between 4 and 16.`);
   }
 
   const seen = new Map<string, number>();
   for (const m of MEMBERS) {
     if (!m.name?.trim()) problems.push('A member has a blank name.');
-    if (!m.pin?.trim()) problems.push(`${m.name} has a blank PIN.`);
     const key = m.name.trim().toLowerCase();
     seen.set(key, (seen.get(key) ?? 0) + 1);
   }
@@ -42,21 +41,28 @@ function validateRoster() {
     problems.forEach((p) => console.error(`  - ${p}`));
     process.exit(1);
   }
+}
 
-  const weak = MEMBERS.filter((m) => m.pin.trim().length < 6);
-  if (weak.length) {
-    console.warn(
-      `Warning: ${weak.length} PIN(s) are shorter than 6 characters. ` +
-        'There is no login rate limiting yet, so short PINs are guessable.\n',
-    );
+/** Existing codes are kept so re-seeding does not lock anyone out. */
+function resolvePins(): { pins: Record<string, string>; created: string[] } {
+  const pins = loadPins();
+  const created: string[] = [];
+
+  for (const m of MEMBERS) {
+    if (!pins[m.name]) {
+      pins[m.name] = generatePin();
+      created.push(m.name);
+    }
   }
+
+  if (created.length) savePins(pins);
+  return { pins, created };
 }
 
 async function main() {
   validateRoster();
+  const { pins, created } = resolvePins();
 
-  // Times are written with the IANA zone so Postgres resolves the offset. The
-  // schedule is 12:00 AM to 5:00 PM on 7 September 2026, then selection to 6 PM.
   await query(
     `insert into league_settings (
        id, league_name, timezone,
@@ -73,15 +79,15 @@ async function main() {
      on conflict (id) do update
        set league_name = excluded.league_name,
            timezone    = excluded.timezone,
-           -- Keeps league_size in step when the roster below changes. The
-           -- schedule is deliberately left alone so re-seeding cannot clobber
-           -- dates the commissioner has already adjusted.
+           -- Keeps league_size in step when the roster changes. The schedule is
+           -- deliberately left alone so re-seeding cannot clobber dates the
+           -- commissioner has already adjusted.
            league_size = excluded.league_size`,
-    [20260907, MEMBERS.filter((m) => !m.admin).length],
+    [20260907, players().length],
   );
 
   for (const m of MEMBERS) {
-    const hash = await hashAccessCode(m.pin);
+    const hash = await hashAccessCode(pins[m.name]);
     await query(
       `insert into league_members (display_name, team_name, access_code_hash, is_admin)
        values ($1, $2, $3, $4)
@@ -93,8 +99,19 @@ async function main() {
     );
   }
 
-  console.log(`Seeded ${MEMBERS.length} members.`);
-  console.table(MEMBERS.map((m) => ({ name: m.name, pin: m.pin, admin: !!m.admin })));
+  console.log(`Seeded ${MEMBERS.length} members, league size ${players().length}.`);
+  if (created.length) {
+    console.log(`Generated ${created.length} new access code(s) into ${PINS_PATH}.`);
+  }
+  console.log('\nAccess codes (hand these out privately):\n');
+  console.table(
+    MEMBERS.map((m) => ({
+      manager: m.name,
+      code: pins[m.name],
+      admin: m.admin ? 'yes' : '',
+    })),
+  );
+
   await pool().end();
 }
 

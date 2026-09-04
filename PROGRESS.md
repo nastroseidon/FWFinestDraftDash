@@ -168,7 +168,8 @@ lib/
   client.ts             Browser side API calls
 db/migrations/          SQL migrations
 scripts/
-  roster.ts             The league roster, the only file to edit for managers
+  roster.ts             The league roster. Names only, no secrets
+  pins.ts               Access code generation, reads db/pins.local.json
   simulate.ts, migrate.ts, seed.ts, prune.ts, test-api.ts
 ```
 
@@ -201,8 +202,8 @@ for the commissioner, belongs with the Phase 5 ranking work.
 **Backgrounding pauses the run.** Phaser stops when the tab is hidden. Harmless
 in practice but worth closing before official runs.
 
-**The roster is placeholder.** Manager 1 through Manager 12 with obvious PINs.
-See the setup tasks.
+**Team names are not set.** The twelve real managers are configured, but nobody
+has a team name yet. They show on the main menu and in the final draft order.
 
 ## What is still open
 
@@ -210,7 +211,7 @@ Two things are blocked on account access and are described step by step in
 [SETUP_TASKS.md](SETUP_TASKS.md):
 
 1. Provision a hosted Postgres and connect it to Vercel.
-2. Replace the placeholder roster with the real managers and PINs.
+2. Push the access codes to production and hand them out.
 
 Neither blocks Phase 4, which can be built and tested against the local
 database.

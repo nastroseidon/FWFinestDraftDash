@@ -48,3 +48,6 @@ next-env.d.ts
 
 # Compiled helper scripts
 .scripts/
+
+# Manager access codes. Never commit these.
+db/pins.local.json
