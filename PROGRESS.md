@@ -12,7 +12,7 @@ Target deadline: 7 September 2026, official runs open at midnight.
 | 1 | Core playable game | Done, pushed (`f9591f6`) |
 | 2 | Retro arcade polish | Done, pushed (`b9ae3fb`) |
 | 3 | Backend, manager access, one official attempt | Done, pushed (`4087dd5`) |
-| 4 | Draft position selection | Not started |
+| 4 | Draft position selection | Done (`npm run test:draft`) |
 | 5 | Commissioner dashboard and final reveal | Not started |
 | 6 | PWA, deploy, production config | Not started |
 
@@ -146,6 +146,53 @@ countdown, ran practice and confirmed the score persisted, opened the window,
 ran the official, saw SCORE LOCKED, and confirmed the menu refused a second
 attempt.
 
+## Phase 4: draft position selection
+
+Rank order decides who picks when. It does not assign positions: the highest
+score chooses any slot it likes, and everyone after picks from what is left.
+
+**Ranking is frozen, not computed on the fly.** Once `selection_priority` is
+written it never moves, or a player's turn could shift underneath them
+mid-selection. Order is completed runs by score descending, then anyone who did
+not complete one. Ties break on a random value stored when the member row was
+created, never on finishing time.
+
+A manager who misses the window is assigned a real score of 0 and ranks behind
+every completed run, including a completed zero. The two stay distinguishable by
+`official_completed_at`, which is how the commissioner dashboard will flag them.
+
+**A player learns nothing about anyone else.** The status endpoint returns their
+own score, their own slot, and whether it is their turn. Nothing else. The board
+is sent only to the player on the clock, and it carries availability alone: no
+names, no ranks, no timestamps, no counts. A waiting player sees only NOT YOUR
+TURN.
+
+**Two people can never hold the same slot.** Every claim runs inside one
+transaction holding an advisory lock, which checks the window, the turn, and the
+slot together. The unique index on `selected_draft_slot` is the backstop if that
+reasoning is ever wrong. A stale board that confirms a slot taken moments earlier
+is rejected with a snarky message and a refreshed board.
+
+Taken slots stay visible and stay tappable, purely for entertainment, and never
+become selectable.
+
+### Verification
+
+`npm run test:draft` runs 50 tests, including a full twelve manager draft from
+start to finish where each pick deliberately does not match its rank.
+
+Mutation tested. Five mutations, each confirmed to break the suite before being
+reverted: removing turn gating, sending the board to waiting players, dropping
+the taken-slot check, recomputing rankings instead of freezing them, and ranking
+missed runs alongside completed ones.
+
+The freeze mutation initially passed, which was the useful part. The recompute
+was not being ignored, it was crashing on a unique index violation while
+priorities swapped places, so the order held for the wrong reason. That is a real
+bug for Phase 5, where a commissioner reset means re-ranking. Fixed by clearing
+priorities before reassigning, and the test now asserts the request succeeded
+rather than only that the order held.
+
 ## Project layout
 
 ```
@@ -192,7 +239,9 @@ scripts/
 | `npm run db:migrate` | Apply pending SQL migrations |
 | `npm run db:seed` | Insert league settings and members |
 | `npm run db:prune` | List members not in the roster, `-- --yes` to delete |
-| `npm run test:api` | 32 integration tests, dev server must be running |
+| `npm run test:api` | 37 integration tests, dev server must be running |
+| `npm run test:draft` | 50 draft selection tests, dev server must be running |
+| `npm test` | Both suites |
 
 ## Known limitations
 

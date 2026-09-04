@@ -144,6 +144,7 @@ body::after {
 
 .label {
   font-size: 10px;
+  line-height: 1.9;
   letter-spacing: 2px;
   color: var(--fwf-gold);
   margin: 0;
@@ -287,6 +288,66 @@ body::after {
   border: none;
   opacity: 0.55;
   cursor: pointer;
+}
+
+/* --- Draft board --- */
+
+.panel.wide {
+  width: min(96vw, 460px);
+}
+
+.slotGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 26px 0 8px;
+}
+
+.slot {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--arcade);
+  font-size: 20px;
+  color: var(--fwf-navy);
+  background: var(--fwf-gold);
+  border: 4px solid var(--fwf-cream);
+  border-radius: 0;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: transform 60ms linear, box-shadow 60ms linear;
+}
+
+.slot:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Taken slots stay visible and stay tappable, they simply never become
+   selectable. No names, no icons, no timestamps. */
+.slot.unavailable {
+  color: rgba(245, 241, 230, 0.3);
+  background: rgba(245, 241, 230, 0.06);
+  border-color: rgba(245, 241, 230, 0.15);
+  box-shadow: none;
+}
+
+.slotBig {
+  margin: 18px 0 14px;
+  font-family: var(--arcade);
+  font-size: clamp(52px, 20vw, 88px);
+  line-height: 1;
+  color: var(--fwf-gold);
+  text-shadow: 5px 5px 0 var(--fwf-blue);
+}
+
+.snark {
+  margin: 24px 0 30px;
+  font-size: 11px;
+  line-height: 2.1;
+  color: var(--fwf-cream);
+  white-space: pre-line;
 }
 
 /* --- Mute --- */

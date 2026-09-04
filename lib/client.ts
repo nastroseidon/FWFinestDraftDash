@@ -2,6 +2,16 @@
 
 export type Phase = 'pre' | 'official' | 'ranking' | 'selection' | 'complete';
 
+export type DraftStatus = {
+  phase: Phase;
+  officialScore: number | null;
+  selectedSlot: number | null;
+  onTheClock: boolean;
+  board: { slot: number; available: boolean }[] | null;
+  leagueSize: number;
+  selectionComplete: boolean;
+};
+
 export type SessionState =
   | { signedIn: false }
   | {
@@ -53,6 +63,8 @@ export const api = {
   startOfficial: () => call<{ seed: number }>('/api/official/start', {}),
   completeOfficial: (score: number) =>
     call<{ score: number; alreadyLocked: boolean }>('/api/official/complete', { score }),
+  draftStatus: () => call<DraftStatus>('/api/draft/status'),
+  claimSlot: (slot: number) => call<{ ok: true; slot: number }>('/api/draft/claim', { slot }),
 };
 
 /** Human countdown, e.g. "2d 04:31:07". */

@@ -7,10 +7,17 @@ type Props = {
   session: Extract<SessionState, { signedIn: true }>;
   onPractice: () => void;
   onOfficial: () => void;
+  onDraft: () => void;
   onSignOut: () => void;
 };
 
-export default function MainMenu({ session, onPractice, onOfficial, onSignOut }: Props) {
+export default function MainMenu({
+  session,
+  onPractice,
+  onOfficial,
+  onDraft,
+  onSignOut,
+}: Props) {
   const { member, league } = session;
   const countdown = useCountdown(league.msUntilOfficialOpen);
 
@@ -47,6 +54,13 @@ export default function MainMenu({ session, onPractice, onOfficial, onSignOut }:
           onClick={onOfficial}
         >
           {officialLabel}
+        </button>
+
+        <button
+          className={league.phase === 'selection' ? 'btn danger' : 'btn secondary'}
+          onClick={onDraft}
+        >
+          DRAFT STATUS
         </button>
 
         {league.phase === 'pre' && countdown !== null ? (

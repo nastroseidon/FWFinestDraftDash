@@ -5,9 +5,9 @@ Fantasy Football League. You run up an infinite field with one control: tap anyw
 switch lanes. Your score is the exact number of yards you survive, and it is hidden until
 the run ends.
 
-**Status: Phase 3 (backend) complete.** Manager sign-in, practice persistence, the official
-run window, and one-attempt enforcement all work against Postgres. Draft-position selection
-(Phase 4) and the commissioner dashboard (Phase 5) are not built yet.
+**Status: Phase 4 complete.** Manager sign-in, practice persistence, the official run
+window, one-attempt enforcement, and draft-position selection all work against Postgres.
+The commissioner dashboard and final reveal (Phase 5) are not built yet.
 
 ## Local setup
 
@@ -44,7 +44,9 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 | `npm run simulate` | Headless course verification (see below) |
 | `npm run db:migrate` | Apply pending SQL migrations |
 | `npm run db:seed` | Insert league settings and members (safe to re-run) |
-| `npm run test:api` | Integration tests against a running dev server |
+| `npm run test:api` | Backend integration tests (dev server must be running) |
+| `npm run test:draft` | Draft selection tests (dev server must be running) |
+| `npm test` | Both suites |
 
 ## Project structure
 

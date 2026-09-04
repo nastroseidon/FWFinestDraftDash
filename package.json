@@ -12,7 +12,9 @@
     "db:migrate": "tsc scripts/migrate.ts --outDir .scripts --module commonjs --target es2022 --moduleResolution node --skipLibCheck --esModuleInterop && node -r ./scripts/env.js .scripts/scripts/migrate.js",
     "db:seed": "tsc scripts/seed.ts --outDir .scripts --module commonjs --target es2022 --moduleResolution node --skipLibCheck --esModuleInterop && node -r ./scripts/env.js .scripts/scripts/seed.js",
     "test:api": "tsc scripts/test-api.ts --outDir .scripts --module commonjs --target es2022 --moduleResolution node --skipLibCheck --esModuleInterop && node -r ./scripts/env.js .scripts/scripts/test-api.js",
-    "db:prune": "tsc scripts/prune.ts --outDir .scripts --module commonjs --target es2022 --moduleResolution node --skipLibCheck --esModuleInterop && node -r ./scripts/env.js .scripts/scripts/prune.js"
+    "db:prune": "tsc scripts/prune.ts --outDir .scripts --module commonjs --target es2022 --moduleResolution node --skipLibCheck --esModuleInterop && node -r ./scripts/env.js .scripts/scripts/prune.js",
+    "test:draft": "tsc scripts/test-draft.ts --outDir .scripts --module commonjs --target es2022 --moduleResolution node --skipLibCheck --esModuleInterop && node -r ./scripts/env.js .scripts/scripts/test-draft.js",
+    "test": "npm run test:api && npm run test:draft"
   },
   "dependencies": {
     "next": "16.3.4",
