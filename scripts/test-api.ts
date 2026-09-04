@@ -6,7 +6,7 @@
  */
 import { pool, query } from '../lib/db';
 import { loadPins } from './pins';
-import { players } from './roster';
+import { MEMBERS, players } from './roster';
 
 // Tests run against whatever roster is configured, so swapping the league does
 // not break them.
@@ -20,6 +20,12 @@ const P = (i: number) => {
   return { name: m.name, pin };
 };
 const [P1, P2, P3, P4, P5] = [0, 1, 2, 3, 4].map(P);
+
+const ADMIN = (() => {
+  const m = MEMBERS.find((x) => x.admin);
+  if (!m) throw new Error('Roster has no admin.');
+  return { name: m.name, pin: PINS[m.name], plays: m.plays !== false };
+})();
 
 const BASE = process.env.TEST_BASE ?? 'http://localhost:3000';
 
@@ -206,6 +212,50 @@ async function main() {
     check('session exposes no leaderboard', !/leaderboard/i.test(text));
   }
 
+  console.log('\nThe commissioner gets no special treatment');
+  {
+    await setOfficialWindow(true);
+    await resetMember(ADMIN.name);
+
+    const c = new Client();
+    await c.post('/api/login', { name: ADMIN.name, pin: ADMIN.pin });
+
+    const session = await c.get('/api/session');
+    check('admin session reports isAdmin', session.body.member?.isAdmin === true);
+
+    if (ADMIN.plays) {
+      const first = await c.post('/api/official/start');
+      check('admin can start an official run', first.status === 200, `got ${first.status}`);
+
+      const second = await c.post('/api/official/start');
+      check('admin gets no restart either', second.status === 409, `got ${second.status}`);
+
+      await c.post('/api/official/complete', { score: 777 });
+      const overwrite = await c.post('/api/official/complete', { score: 999999 });
+      check('admin score is locked too', overwrite.body.score === 777, `got ${overwrite.body.score}`);
+    }
+
+    // Every member who will draft needs a slot on the board. Derived from the
+    // database row count rather than players(), so a bug in players() cannot
+    // make this assertion agree with itself.
+    const size = await query<{ league_size: number }>(
+      'select league_size from league_settings where id = 1',
+    );
+    const memberCount = await query<{ n: string }>(
+      'select count(*)::text as n from league_members',
+    );
+    const nonPlaying = MEMBERS.filter((m) => m.plays === false).length;
+    const expectedSlots = Number(memberCount[0].n) - nonPlaying;
+    check(
+      'league size gives every drafting member a slot',
+      size[0].league_size === expectedSlots,
+      `league_size=${size[0].league_size} drafting members=${expectedSlots}`,
+    );
+
+    await resetMember(ADMIN.name);
+    await setOfficialWindow(null);
+  }
+
   console.log('\nPractice');
   {
     await resetMember(P3.name);
@@ -247,7 +297,7 @@ async function main() {
 
   // Leave the league as we found it.
   await setOfficialWindow(null);
-  for (const p of [P1, P2, P3, P4, P5]) {
+  for (const p of [P1, P2, P3, P4, P5, ADMIN]) {
     await resetMember(p.name);
   }
 

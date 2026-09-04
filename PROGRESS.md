@@ -202,8 +202,14 @@ for the commissioner, belongs with the Phase 5 ranking work.
 **Backgrounding pauses the run.** Phaser stops when the tab is hidden. Harmless
 in practice but worth closing before official runs.
 
-**Team names are not set.** The twelve real managers are configured, but nobody
-has a team name yet. They show on the main menu and in the final draft order.
+**Team names are not used, by decision.** Managers are identified by first name
+throughout. The team field is nullable and every screen renders correctly
+without one, which is verified. The final reveal in Phase 5 will show names
+alone.
+
+**The roster is live.** Twelve managers, with Nicholas as both commissioner and
+player. Access codes are generated into `db/pins.local.json`, which is gitignored
+because this repository is public.
 
 ## What is still open
 

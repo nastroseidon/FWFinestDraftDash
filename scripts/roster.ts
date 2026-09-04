@@ -16,10 +16,13 @@ export type RosterEntry = {
   plays?: boolean;
 };
 
+// The league goes by first names. `team` is left unset deliberately; every
+// screen renders correctly without one.
+//
+// Nicholas is the commissioner and also runs, so he carries `admin: true` and
+// still counts toward league size. `plays: false` exists for a commissioner who
+// administers without taking a draft slot, which is not the case here.
 export const MEMBERS: RosterEntry[] = [
-  // Commissioner account. Administers, does not take a draft slot.
-  { name: 'Commissioner', team: 'League Office', admin: true, plays: false },
-
   { name: 'Dan' },
   { name: 'Nikita' },
   { name: 'Chris' },
@@ -31,7 +34,7 @@ export const MEMBERS: RosterEntry[] = [
   { name: 'Jamaris' },
   { name: 'Kevin' },
   { name: 'Ryan' },
-  { name: 'Nicholas' },
+  { name: 'Nicholas', admin: true },
 ];
 
 /** Everyone who takes a draft slot. This is what league_size counts. */

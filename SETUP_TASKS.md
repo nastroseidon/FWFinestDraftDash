@@ -142,7 +142,7 @@ codes are generated. What is left is getting those codes into production and
 handing them out.
 
 Dan, Nikita, Chris, Travis, Mark, Ben, Chad, Colby, Jamaris, Kevin, Ryan,
-Nicholas. League size 12.
+Nicholas. League size 12. Nicholas is also the commissioner.
 
 ## 2.1 How codes are kept out of the public repository
 
@@ -205,26 +205,36 @@ The message is short:
 > Code: <their code from the seed output>
 > One official run on Sunday. Practice as much as you like.
 
-## 2.6 Team names, optional
+## 2.6 Team names
 
-Nobody has one yet. They show on the main menu and in the final draft order.
-Add them in `scripts/roster.ts`:
+Not being used. Managers are identified by first name throughout, which is what
+the league wanted.
+
+Nothing needs doing. The team field stays empty, and the main menu and final
+draft order simply show the name on its own.
+
+If that changes later, add a team in `scripts/roster.ts` and re-seed. Codes and
+scores are untouched:
 
 ```ts
 { name: 'Dan', team: 'Fort Wayne Fury' },
 ```
 
-Then re-seed. Codes and scores are untouched.
+## 2.7 The commissioner account
 
-## 2.7 About the Commissioner account
+`Nicholas` is the commissioner and also runs. One login does both: the
+commissioner dashboard when Phase 5 lands, and a normal official run like
+everyone else.
 
-There is a separate `Commissioner` login that administers but does not run,
-marked `plays: false`, so it does not take a draft slot and league size stays at
-12.
+Being admin grants no gameplay advantage. Nicholas gets the same single attempt,
+the same locked score and the same refusal on a restart. There are tests for
+exactly that, so it cannot quietly change later.
 
-If you would rather have admin rights on your own player account instead of
-a second login, say so and I will move the flag to `Nicholas`. League size stays
-12 either way.
+League size is 12, counting Nicholas.
+
+There is no separate Commissioner login any more. If you ever want one, add an
+entry with `admin: true, plays: false` and it administers without taking a draft
+slot.
 
 ---
 
