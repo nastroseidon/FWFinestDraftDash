@@ -28,6 +28,9 @@ export default function GameCanvas({ seed, onRunOver }: Props) {
       const [{ default: Phaser }, { RunScene }] = await Promise.all([
         import('phaser'),
         import('@/game/scenes/RunScene'),
+        // Phaser draws text to canvas, which silently falls back to a default
+        // face if the arcade font has not loaded yet.
+        document.fonts?.load('16px "Press Start 2P"').catch(() => undefined),
       ]);
       if (cancelled || !hostRef.current) return;
 
@@ -42,6 +45,12 @@ export default function GameCanvas({ seed, onRunOver }: Props) {
           autoCenter: Phaser.Scale.CENTER_BOTH,
         },
         input: { activePointers: 1 },
+        // We synthesise our own sound; Phaser's manager would only add a
+        // second, unused AudioContext.
+        audio: { noAudio: true },
+        // Chunky pixels, not smoothed ones.
+        pixelArt: true,
+        roundPixels: true,
         scene: [RunScene],
       });
 

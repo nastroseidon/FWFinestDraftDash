@@ -2,7 +2,9 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useState } from 'react';
+import MuteButton from '@/components/MuteButton';
 import ScoreReveal from '@/components/ScoreReveal';
+import { sfx } from '@/game/audio';
 import { PRACTICE_SEED } from '@/game/config';
 
 // Phaser is browser-only.
@@ -20,10 +22,13 @@ export default function Home() {
     const stored = Number(window.localStorage.getItem(BEST_KEY) ?? 0);
     return Number.isFinite(stored) ? stored : 0;
   });
-  // Changing the seed forces a fresh Phaser instance for each run.
+  // Changing this forces a fresh Phaser instance for each run.
   const [runId, setRunId] = useState(0);
 
   const startRun = useCallback(() => {
+    // Browsers only allow audio to start from a user gesture.
+    sfx.loadPreference();
+    sfx.unlock();
     setRunId((n) => n + 1);
     setScreen('playing');
   }, []);
@@ -47,6 +52,7 @@ export default function Home() {
   }
 
   if (screen === 'result') {
+    const beaten = yards > 0 && yards >= best;
     return (
       <main className="app">
         <div className="panel">
@@ -54,7 +60,9 @@ export default function Home() {
           <p className="label">FINAL DISTANCE</p>
           <ScoreReveal yards={yards} />
           <p className="unit">YARDS</p>
-          <p className="meta">PERSONAL BEST — {best.toLocaleString('en-US')} YARDS</p>
+          <p className="meta">
+            {beaten ? 'NEW PERSONAL BEST' : `PERSONAL BEST — ${best.toLocaleString('en-US')}`}
+          </p>
           <button className="btn" onClick={startRun}>
             RUN IT BACK
           </button>
@@ -62,6 +70,7 @@ export default function Home() {
             MAIN MENU
           </button>
         </div>
+        <MuteButton />
       </main>
     );
   }
@@ -70,7 +79,11 @@ export default function Home() {
     <main className="app">
       <div className="panel">
         <p className="brand">FORT WAYNE FINEST</p>
-        <h1 className="title">DRAFT DASH</h1>
+        <h1 className="title">
+          DRAFT
+          <br />
+          DASH
+        </h1>
         <button className="btn" onClick={startRun}>
           PRACTICE
         </button>
@@ -83,6 +96,7 @@ export default function Home() {
           DON&apos;T GET TACKLED.
         </p>
       </div>
+      <MuteButton />
     </main>
   );
 }

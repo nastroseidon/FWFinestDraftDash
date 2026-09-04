@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { sfx } from '@/game/audio';
 
 /** Rapidly counts up to the final yardage before landing on the exact number. */
 export default function ScoreReveal({ yards }: { yards: number }) {
@@ -10,20 +11,36 @@ export default function ScoreReveal({ yards }: { yards: number }) {
     const duration = 1200;
     const start = performance.now();
     let frame = 0;
+    let lastTickAt = 0;
+    let landed = false;
+
+    const land = () => {
+      if (landed) return;
+      landed = true;
+      setShown(yards);
+      sfx.revealLand();
+    };
 
     const tick = (now: number) => {
       const t = Math.min((now - start) / duration, 1);
       // Ease out so the number slams to a stop rather than drifting.
       const eased = 1 - Math.pow(1 - t, 3);
       setShown(Math.floor(eased * yards));
+
+      // Throttled, or a four-figure score would fire hundreds of oscillators.
+      if (now - lastTickAt > 45) {
+        lastTickAt = now;
+        sfx.revealTick();
+      }
+
       if (t < 1) frame = requestAnimationFrame(tick);
-      else setShown(yards);
+      else land();
     };
 
     frame = requestAnimationFrame(tick);
     // rAF is throttled when the tab is backgrounded, which would leave the
     // number stranded mid-count. Guarantee it lands on the real score.
-    const settle = setTimeout(() => setShown(yards), duration + 100);
+    const settle = setTimeout(land, duration + 100);
 
     return () => {
       cancelAnimationFrame(frame);

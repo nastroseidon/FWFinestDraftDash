@@ -5,8 +5,9 @@ Fantasy Football League. You run up an infinite field with one control: tap anyw
 switch lanes. Your score is the exact number of yards you survive, and it is hidden until
 the run ends.
 
-**Status: Phase 1 (core playable game).** Practice mode works end to end. Official runs,
-Supabase, draft-position selection, and the commissioner dashboard are not built yet.
+**Status: Phase 2 (game polish) complete.** Practice mode works end to end with pixel art,
+milestone banners, and arcade sound. Official runs, Supabase, draft-position selection, and
+the commissioner dashboard are not built yet.
 
 ## Local setup
 
@@ -41,10 +42,14 @@ components/
   GameCanvas.tsx      Mounts Phaser for one run (client-only)
   OrientationGuard.tsx Landscape rotate-back overlay
   ScoreReveal.tsx     Count-up animation for the final yardage
+  MuteButton.tsx      Sound on/off, persisted per device
 game/
   config.ts           All gameplay tuning constants
   rng.ts              Seeded deterministic PRNG (mulberry32)
   course.ts           The entire simulation, with no Phaser dependency
+  sprites.ts          Pixel-art grids, baked into textures at boot
+  audio.ts            Web Audio arcade sounds, synthesised (no audio files)
+  milestones.ts       Milestone thresholds and banner text
   scenes/RunScene.ts  Phaser scene: renders a Course and forwards taps
 scripts/
   simulate.ts         Headless verification of course invariants
@@ -76,6 +81,16 @@ later replayed server-side) without a browser.
   window. Changing `SPAWN_GAP_MIN` below that separation will break fairness; `npm run
   simulate` catches it.
 
+## No art or audio files
+
+Every sprite is a character grid in `game/sprites.ts`, baked into a texture at boot.
+Every sound is synthesised from oscillators and noise buffers in `game/audio.ts`. The turf,
+crowd, and stars are drawn with `Graphics`. Nothing but the Press Start 2P webfont is
+fetched, which keeps the payload small and means there is no art to source.
+
+Audio is never required: if the `AudioContext` cannot start, every call is a no-op. The
+sound toggle persists per device.
+
 ## Hidden score
 
 Yardage is tracked internally and never rendered during a run. There are no yard markers,
@@ -89,5 +104,5 @@ the browser. Supabase arrives in Phase 3.
 ## Not built yet
 
 Official run window and one-attempt enforcement, server-side event timing, manager PIN
-access, score persistence, draft-position selection, the commissioner dashboard, the final
-reveal, sound, milestone overlays, and final art.
+access, score persistence, draft-position selection, the commissioner dashboard, and the
+final reveal.

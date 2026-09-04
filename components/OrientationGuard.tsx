@@ -22,9 +22,13 @@ export default function OrientationGuard() {
 
   return (
     <div className="rotateOverlay">
-      <div className="rotateIcon">📱</div>
+      <div className="rotateIcon" />
       <h2>ROTATE YOUR PHONE</h2>
-      <p>Draft Dash runs in portrait. Turn it back.</p>
+      <p>
+        DRAFT DASH RUNS IN PORTRAIT.
+        <br />
+        TURN IT BACK.
+      </p>
     </div>
   );
 }

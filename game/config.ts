@@ -56,20 +56,27 @@ export const STACK_OFFSET_MAX = 90;
 
 export type DefenderKind = {
   key: string;
-  /** Body colour. */
+  /** Jersey colour. */
   color: number;
-  width: number;
-  height: number;
+  helmet: number;
+  /** Which pixel grid to draw. Linemen are broader through the shoulders. */
+  build: 'standard' | 'lineman';
+  /** Sprite pixel size. Purely cosmetic. */
+  scale: number;
   /** Visual flourish only; never affects the lane rule or speed. */
   motion: 'run' | 'dive' | 'spin' | 'hurdle' | 'lunge';
 };
 
-/** Visual variety only. Every defender obeys the same lane rule. */
+/**
+ * Visual variety only. Every defender obeys the same lane rule and falls at the
+ * same speed. Keep this list the same length and order once official runs open:
+ * the course seed indexes into it, so reordering changes everyone's course.
+ */
 export const DEFENDER_KINDS: readonly DefenderKind[] = [
-  { key: 'lb', color: 0xe0453a, width: 44, height: 54, motion: 'run' },
-  { key: 'db', color: 0xf2a03d, width: 38, height: 50, motion: 'lunge' },
-  { key: 'line', color: 0x9b3fd4, width: 62, height: 60, motion: 'run' },
-  { key: 'safety', color: 0x2fbf6f, width: 42, height: 52, motion: 'dive' },
-  { key: 'edge', color: 0x3f8fe0, width: 40, height: 54, motion: 'spin' },
-  { key: 'nickel', color: 0xe05fa8, width: 40, height: 52, motion: 'hurdle' },
+  { key: 'lb', color: 0xe0453a, helmet: 0xb8241a, build: 'standard', scale: 5, motion: 'run' },
+  { key: 'db', color: 0xf2a03d, helmet: 0xc9761d, build: 'standard', scale: 4.5, motion: 'lunge' },
+  { key: 'line', color: 0x9b3fd4, helmet: 0x6f21a0, build: 'lineman', scale: 5.8, motion: 'run' },
+  { key: 'safety', color: 0x2fbf6f, helmet: 0x1c8a4c, build: 'standard', scale: 4.8, motion: 'dive' },
+  { key: 'edge', color: 0x3f8fe0, helmet: 0x1f63ac, build: 'standard', scale: 5, motion: 'spin' },
+  { key: 'nickel', color: 0xe05fa8, helmet: 0xb0347b, build: 'standard', scale: 4.8, motion: 'hurdle' },
 ];

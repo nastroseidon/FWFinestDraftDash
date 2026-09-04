@@ -1,6 +1,14 @@
 import type { Metadata, Viewport } from 'next';
+import { Press_Start_2P } from 'next/font/google';
 import OrientationGuard from '@/components/OrientationGuard';
 import './globals.css';
+
+const arcade = Press_Start_2P({
+  weight: '400',
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-arcade',
+});
 
 export const metadata: Metadata = {
   title: 'Fort Wayne Finest: Draft Dash',
@@ -18,7 +26,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en">
+    <html lang="en" className={arcade.variable}>
       <body>
         {children}
         <OrientationGuard />

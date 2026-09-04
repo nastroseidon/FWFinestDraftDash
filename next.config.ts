@@ -1,7 +1,9 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // This project documents itself in README.md; the generated agent files are
+  // noise in the diff.
+  agentRules: false,
 };
 
 export default nextConfig;
