@@ -389,6 +389,178 @@ async function main() {
     check('selection reports complete', done.body.selectionComplete === true);
   }
 
+  console.log('\nManagers who never ran do not get a turn');
+  {
+    // Nine run, three do not.
+    const partial: Record<string, number | null> = {};
+    names.forEach((n, i) => {
+      partial[n] = i < 9 ? 5000 - i * 100 : null;
+    });
+    await resetDraft(partial);
+    await setSelectionOpen(true);
+    // The official window has to be shut, or the no-show set is not final.
+    await query('update league_settings set official_open_override = false where id = 1');
+
+    const ranAndWaiting = await new Client(names[0]).signIn();
+    const first = await ranAndWaiting.get('/api/draft/status');
+    check('a manager who ran is on the clock', first.body.onTheClock === true);
+
+    const noShow = await new Client(names[11]).signIn();
+    const theirs = await noShow.get('/api/draft/status');
+    check('a no-show is never on the clock', theirs.body.onTheClock === false);
+    check('a no-show gets no board', theirs.body.board === null);
+
+    const sneak = await noShow.post('/api/draft/claim', { slot: 1 });
+    check('a no-show cannot claim a position', sneak.status === 400, `got ${sneak.status}`);
+
+    // The nine who ran pick, each taking the highest free position, so the
+    // leftovers are the low numbers.
+    const picked: string[] = [];
+    for (let i = 0; i < 9; i += 1) {
+      const c = await new Client(names[i]).signIn();
+      const st = await c.get('/api/draft/status');
+      if (!st.body.onTheClock) {
+        check(`${names[i]} was on the clock at turn ${i + 1}`, false);
+        break;
+      }
+      const free = st.body.board
+        .filter((x: { available: boolean }) => x.available)
+        .map((x: { slot: number }) => x.slot);
+      await c.post('/api/draft/claim', { slot: free[free.length - 1] });
+      picked.push(names[i]);
+    }
+    check('only the nine who ran got a turn', picked.length === 9, `${picked.length}`);
+
+    const dealt = await query<{ display_name: string; selected_draft_slot: number }>(`
+      select display_name, selected_draft_slot from league_members
+       where official_completed_at is null
+       order by selected_draft_slot
+    `);
+    check('all three no-shows were dealt a position', dealt.length === 3, `${dealt.length}`);
+    check(
+      'they got the positions nobody chose',
+      dealt.every((d) => d.selected_draft_slot <= 3),
+      dealt.map((d) => d.selected_draft_slot).join(','),
+    );
+
+    const all = await query<{ n: string }>(
+      'select count(*)::text as n from league_members where selected_draft_slot is null',
+    );
+    check('every position is filled', all[0].n === '0');
+
+    const reveal = await query<{ released: boolean }>(
+      'select reveal_released as released from league_settings',
+    );
+    check('the draft order opened once the board filled', reveal[0].released === true);
+  }
+
+  console.log('\nDealing is stable and cannot be nudged');
+  {
+    const before = await query<{ display_name: string; selected_draft_slot: number }>(`
+      select display_name, selected_draft_slot from league_members
+       where official_completed_at is null order by display_name
+    `);
+    // Re-running the deal must not move anybody.
+    await new Client(names[0]).signIn().then((c) => c.get('/api/draft/status'));
+    const after = await query<{ display_name: string; selected_draft_slot: number }>(`
+      select display_name, selected_draft_slot from league_members
+       where official_completed_at is null order by display_name
+    `);
+    check(
+      'a second pass changes nothing',
+      JSON.stringify(before) === JSON.stringify(after),
+      JSON.stringify(after),
+    );
+  }
+
+  console.log('\nNobody runs at all');
+  {
+    await resetDraft({});
+    await setSelectionOpen(true);
+    await query('update league_settings set official_open_override = false where id = 1');
+
+    const c = await new Client(names[0]).signIn();
+    const st = await c.get('/api/draft/status');
+    check('nobody is on the clock', st.body.onTheClock === false);
+
+    const filled = await query<{ n: string }>(
+      'select count(*)::text as n from league_members where selected_draft_slot is not null',
+    );
+    check('the whole board is dealt at random', filled[0].n === String(names.length), filled[0].n);
+
+    const slots = await query<{ selected_draft_slot: number }>(
+      'select selected_draft_slot from league_members where selected_draft_slot is not null',
+    );
+    check(
+      'every position used exactly once',
+      new Set(slots.map((s) => s.selected_draft_slot)).size === names.length,
+    );
+    await query('update league_settings set official_open_override = null where id = 1');
+  }
+
+  console.log('\nDealing waits for the deadline');
+  {
+    // Nine have run AND all nine have already picked, but the official window
+    // is still open, so those three could still turn up and run. Nothing may be
+    // dealt yet. Without every runner already placed, the pending-runner guard
+    // would block dealing on its own and this would prove nothing.
+    const partial: Record<string, number | null> = {};
+    names.forEach((n, i) => {
+      partial[n] = i < 9 ? 5000 - i * 100 : null;
+    });
+    await resetDraft(partial);
+    await query(
+      'update league_settings set official_open_override = true, selection_open_override = true where id = 1',
+    );
+
+    for (let i = 0; i < 9; i += 1) {
+      const c = await new Client(names[i]).signIn();
+      const st = await c.get('/api/draft/status');
+      if (!st.body.onTheClock) break;
+      const free = st.body.board
+        .filter((x: { available: boolean }) => x.available)
+        .map((x: { slot: number }) => x.slot);
+      await c.post('/api/draft/claim', { slot: free[free.length - 1] });
+    }
+
+    const placedRunners = await query<{ n: string }>(`
+      select count(*)::text as n from league_members
+       where official_completed_at is not null and selected_draft_slot is not null
+    `);
+    check('all nine runners have picked', placedRunners[0].n === '9', placedRunners[0].n);
+
+    const c = await new Client(names[0]).signIn();
+    await c.get('/api/draft/status');
+    const dealtEarly = await query<{ n: string }>(`
+      select count(*)::text as n from league_members
+       where official_completed_at is null and selected_draft_slot is not null
+    `);
+    check(
+      'nothing is dealt while a run is still possible',
+      dealtEarly[0].n === '0',
+      dealtEarly[0].n,
+    );
+
+    // And a no-show is still not given a turn, even though they are next in
+    // rank order and nothing has been dealt.
+    const noShow = await new Client(names[11]).signIn();
+    const theirs = await noShow.get('/api/draft/status');
+    check('a no-show is not on the clock even when next in line', theirs.body.onTheClock === false);
+    check('and still gets no board', theirs.body.board === null);
+    const sneak = await noShow.post('/api/draft/claim', { slot: 1 });
+    check('and still cannot claim', sneak.status === 400, `got ${sneak.status}`);
+
+    // Shutting the window is what releases the deal.
+    await query('update league_settings set official_open_override = false where id = 1');
+    await c.get('/api/draft/status');
+    const dealtNow = await query<{ n: string }>(`
+      select count(*)::text as n from league_members
+       where official_completed_at is null and selected_draft_slot is not null
+    `);
+    check('closing the window deals the remainder', dealtNow[0].n === '3', dealtNow[0].n);
+    await query('update league_settings set official_open_override = null where id = 1');
+  }
+
   console.log('\nSelection is closed outside the window');
   {
     await resetDraft(scores);

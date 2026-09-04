@@ -103,6 +103,24 @@ export default function DraftScreen({ onMenu }: { onMenu: () => void }) {
     );
   }
 
+  // Never ran, so there is no turn coming. Say so plainly.
+  if (!status.onTheClock && status.officialScore === null) {
+    return (
+      <Shell>
+        <h1 className="headline">NO OFFICIAL RUN</h1>
+        <p className="warnBody">You did not complete an official run.</p>
+        <p className="warnBody">
+          You do not get to choose. Whatever positions are left over will be dealt
+          out at random once everybody else has picked.
+        </p>
+        <p className="warnBody muted">Should have run.</p>
+        <button className="btn secondary" onClick={onMenu}>
+          MAIN MENU
+        </button>
+      </Shell>
+    );
+  }
+
   // Waiting for their turn. Deliberately says nothing about anyone else.
   if (!status.onTheClock) {
     return (

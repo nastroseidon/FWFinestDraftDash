@@ -157,9 +157,19 @@ mid-selection. Order is completed runs by score descending, then anyone who did
 not complete one. Ties break on a random value stored when the member row was
 created, never on finishing time.
 
-A manager who misses the window is assigned a real score of 0 and ranks behind
-every completed run, including a completed zero. The two stay distinguishable by
-`official_completed_at`, which is how the commissioner dashboard will flag them.
+**A manager who never runs does not get a turn at all.** They are dealt whatever
+positions are left once everybody who did run has chosen. The pairing is random
+but fixed: no-shows are ordered by the `tiebreak` value stored when their row was
+created, so re-running the deal can never produce a different answer and nobody
+can influence it by when they did or did not turn up.
+
+Nothing is dealt while an official run is still possible, because the set of
+no-shows is not final until the window shuts. If nobody runs at all, the entire
+board is dealt at random.
+
+They are still scored 0 and ranked last, which is what the dashboard and the
+final reveal show. `official_completed_at` is what distinguishes a missed run
+from a completed zero.
 
 **A player learns nothing about anyone else.** The status endpoint returns their
 own score, their own slot, and whether it is their turn. Nothing else. The board
@@ -202,8 +212,8 @@ all weekend rather than everything waiting for one day.
 |---|---|
 | Now to Monday 12:00 AM | Practice and official runs both available |
 | Monday 12:00 AM | Practice closes. Only the official run remains |
-| Monday 5:00 PM | Official runs close. Anyone who never ran scores zero |
-| All runs complete | Selection opens immediately, without waiting for 5:00 PM |
+| Monday 12:00 PM | Official runs due. The deadline |
+| All runs complete | Selection opens immediately, without waiting for noon |
 | Monday 6:00 PM | Selection closes |
 
 Selection no longer waits on a wall clock. The moment every manager has a

@@ -1,6 +1,6 @@
 import { PoolClient } from 'pg';
 import { query, transaction } from './db';
-import { ensureRankings } from './draft';
+import { dealLeftoverSlots, ensureRankings } from './draft';
 import { releaseRevealIfComplete } from './reveal';
 import { loadSettings, phaseFor } from './phase';
 
@@ -70,6 +70,9 @@ export async function adminOverview(): Promise<AdminOverview> {
   // dashboard once selection is live is reason enough to settle the order.
   if (phase === 'selection') {
     await ensureRankings();
+    // If everyone who ran has already chosen, this deals the remainder to the
+    // no-shows, which is what finishes the board.
+    if (await dealLeftoverSlots()) await releaseRevealIfComplete();
     settings = await loadSettings();
     phase = phaseFor(settings);
   }

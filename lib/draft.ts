@@ -80,15 +80,86 @@ export async function ensureRankings(): Promise<void> {
   });
 }
 
-/** The member whose turn it is: lowest priority still without a slot. */
+/**
+ * The member whose turn it is: lowest priority still without a slot, among
+ * those who actually completed an official run.
+ *
+ * A manager who never ran does not get a turn at all. They are dealt whatever
+ * positions are left once everyone who ran has chosen.
+ */
 async function currentSelectorId(c: PoolClient): Promise<string | null> {
   const { rows } = await c.query(`
     select id from league_members
-     where selected_draft_slot is null and selection_priority is not null
+     where selected_draft_slot is null
+       and selection_priority is not null
+       and official_completed_at is not null
      order by selection_priority asc
      limit 1
   `);
   return rows[0]?.id ?? null;
+}
+
+/**
+ * Deals the remaining positions to the managers who never ran.
+ *
+ * Runs only once every manager who did run has chosen, so "what is left" is
+ * settled. The pairing is random but fixed: no-shows are ordered by the
+ * `tiebreak` value stored when their row was created, so re-running this can
+ * never produce a different answer, and nobody can influence it by when they
+ * did or did not turn up.
+ *
+ * Returns how many positions were dealt.
+ */
+export async function dealLeftoverSlots(): Promise<number> {
+  const settings = await loadSettings();
+
+  // Never deal while an official run is still possible: the set of no-shows is
+  // not final until the window has shut.
+  const officialStillOpen =
+    settings.official_open_override ??
+    (settings.server_now.getTime() >= settings.official_open_at.getTime() &&
+      settings.server_now.getTime() < settings.official_close_at.getTime());
+  if (officialStillOpen && settings.all_runs_complete_at === null) return 0;
+
+  return transaction(async (c: PoolClient) => {
+    await c.query('select pg_advisory_xact_lock($1)', [DRAFT_LOCK]);
+
+    // Anyone who ran and has not chosen yet still has a turn coming.
+    const pending = await c.query(`
+      select 1 from league_members
+       where selected_draft_slot is null and official_completed_at is not null
+       limit 1
+    `);
+    if (pending.rowCount) return 0;
+
+    const noShows = await c.query(`
+      select id from league_members
+       where selected_draft_slot is null and official_completed_at is null
+       order by tiebreak asc
+    `);
+    if (noShows.rowCount === 0) return 0;
+
+    const taken = await c.query(
+      'select selected_draft_slot from league_members where selected_draft_slot is not null',
+    );
+    const used = new Set(taken.rows.map((r) => r.selected_draft_slot));
+    const free: number[] = [];
+    for (let slot = 1; slot <= settings.league_size; slot += 1) {
+      if (!used.has(slot)) free.push(slot);
+    }
+
+    let dealt = 0;
+    for (let i = 0; i < noShows.rows.length && i < free.length; i += 1) {
+      await c.query(
+        `update league_members
+            set selected_draft_slot = $2, selected_at = now()
+          where id = $1 and selected_draft_slot is null`,
+        [noShows.rows[i].id, free[i]],
+      );
+      dealt += 1;
+    }
+    return dealt;
+  });
 }
 
 export async function draftStatus(memberId: string): Promise<DraftStatus> {
@@ -120,6 +191,8 @@ export async function draftStatus(memberId: string): Promise<DraftStatus> {
   }
 
   await ensureRankings();
+  // Covers the case where nobody ran at all, so there is no pick to trigger it.
+  if (await dealLeftoverSlots()) await releaseRevealIfComplete();
 
   const fresh = (
     await query<{ official_score: number | null; selected_draft_slot: number | null }>(
@@ -179,9 +252,12 @@ export type ClaimResult =
  */
 export async function claimSlot(memberId: string, slot: number): Promise<ClaimResult> {
   const result = await claimSlotInner(memberId, slot);
-  // The last pick opens the draft order to the whole league, with no further
-  // action needed from the commissioner.
-  if (result.ok) await releaseRevealIfComplete();
+  if (result.ok) {
+    // Once the last manager who ran has chosen, whoever never ran is dealt the
+    // remainder. That fills the board, which opens the draft order to everyone.
+    await dealLeftoverSlots();
+    await releaseRevealIfComplete();
+  }
   return result;
 }
 
