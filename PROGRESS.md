@@ -109,8 +109,15 @@ returns the locked score rather than overwriting it.
 
 **Identity.** The session is an httpOnly cookie signed with HMAC SHA256. The
 payload is only a member id; the signature is what stops one manager submitting
-as another. PINs are hashed with scrypt, which ships with Node and needs no
-native module.
+as another. Access codes are hashed with scrypt, which ships with Node and needs
+no native module.
+
+Managers sign in once per device and stay signed in for 30 days. The cookie is
+persistent, so it survives closing the browser, and the signature is stateless,
+so it survives a redeploy. Verified: a session created before a server restart
+could still start an official run afterwards with no credentials resent. The
+only things that end a session are signing out, clearing site data, or changing
+`SESSION_SECRET`.
 
 **Privacy.** `GET /api/session` returns only the caller's own row. No ranks, no
 other managers, no counts.

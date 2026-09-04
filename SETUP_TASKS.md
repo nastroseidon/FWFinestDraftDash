@@ -238,6 +238,41 @@ slot.
 
 ---
 
+# How sign in behaves
+
+Managers sign in **once per device** and stay signed in. Nobody needs their code
+again on the 7th.
+
+The session is a signed cookie with a 30 day lifetime. Verified behaviour:
+
+| Situation | Still signed in? |
+|---|---|
+| Reload the page | Yes |
+| Close the browser and come back later | Yes, it is a persistent cookie, not a session one |
+| You redeploy to Vercel | Yes, there is no server side session store |
+| Restart the phone | Yes |
+| Days pass between practice and the official run | Yes, up to 30 days |
+| They tap SIGN OUT | No, by design |
+| Private browsing, or clearing site data | No |
+| A different phone or browser | No, they sign in there once |
+
+They can also start their official run straight from a session created days
+earlier, with no credentials sent again. That was tested end to end.
+
+## The one thing that would sign everybody out
+
+**Changing `SESSION_SECRET` after managers have signed in.** Sessions are signed
+with it, so a new value invalidates every existing one and all twelve would have
+to dig out their codes again, possibly on the morning of the draft.
+
+Set it once in step 1.3 and leave it alone. It is only worth rotating if it
+leaks, in which case signing everyone out is the point.
+
+Nothing is lost either way: scores live in the database, so a signed out manager
+just signs back in and finds their run exactly as it was.
+
+---
+
 # Before official day
 
 A short list for 7 September. I will handle these unless you want them yourself.
@@ -249,3 +284,7 @@ A short list for 7 September. I will handle these unless you want them yourself.
   5:00 PM, then selection to 6:00 PM, in
   `America/Indiana/Indianapolis`.
 * A dry run on a real phone, both iPhone and Android if you can manage it.
+  Worth confirming on that dry run that a manager signed in one day is still
+  signed in the next. The cookie is set by the server rather than by script, so
+  it is not subject to Safari's seven day cap on script written storage, but a
+  real device is the honest check.
