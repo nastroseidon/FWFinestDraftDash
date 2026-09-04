@@ -2,29 +2,59 @@
  * Seeds league settings and members. Safe to re-run: members are matched on
  * display name and their scores are left alone.
  *
+ * Edit the roster in scripts/roster.ts, not here.
+ *
  * Run with: npm run db:seed
  */
 import { hashAccessCode } from '../lib/auth';
 import { pool, query } from '../lib/db';
+import { MEMBERS } from './roster';
 
-/** Edit this list, then re-run. PINs are printed once and stored hashed. */
-const MEMBERS: { name: string; team?: string; pin: string; admin?: boolean }[] = [
-  { name: 'Commissioner', team: 'League Office', pin: '4242', admin: true },
-  { name: 'Manager 1', pin: '1001' },
-  { name: 'Manager 2', pin: '1002' },
-  { name: 'Manager 3', pin: '1003' },
-  { name: 'Manager 4', pin: '1004' },
-  { name: 'Manager 5', pin: '1005' },
-  { name: 'Manager 6', pin: '1006' },
-  { name: 'Manager 7', pin: '1007' },
-  { name: 'Manager 8', pin: '1008' },
-  { name: 'Manager 9', pin: '1009' },
-  { name: 'Manager 10', pin: '1010' },
-  { name: 'Manager 11', pin: '1011' },
-  { name: 'Manager 12', pin: '1012' },
-];
+/** Catches roster mistakes with a readable message rather than a Postgres dump. */
+function validateRoster() {
+  const problems: string[] = [];
+
+  const admins = MEMBERS.filter((m) => m.admin);
+  if (admins.length !== 1) {
+    problems.push(`Expected exactly one admin, found ${admins.length}.`);
+  }
+
+  const players = MEMBERS.filter((m) => !m.admin);
+  if (players.length < 4 || players.length > 16) {
+    problems.push(
+      `League size is ${players.length}. It must be between 4 and 16 (admins do not count).`,
+    );
+  }
+
+  const seen = new Map<string, number>();
+  for (const m of MEMBERS) {
+    if (!m.name?.trim()) problems.push('A member has a blank name.');
+    if (!m.pin?.trim()) problems.push(`${m.name} has a blank PIN.`);
+    const key = m.name.trim().toLowerCase();
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  for (const [name, count] of seen) {
+    if (count > 1) problems.push(`Duplicate name "${name}" appears ${count} times.`);
+  }
+
+  if (problems.length) {
+    console.error('Roster is not valid. Fix scripts/roster.ts:\n');
+    problems.forEach((p) => console.error(`  - ${p}`));
+    process.exit(1);
+  }
+
+  const weak = MEMBERS.filter((m) => m.pin.trim().length < 6);
+  if (weak.length) {
+    console.warn(
+      `Warning: ${weak.length} PIN(s) are shorter than 6 characters. ` +
+        'There is no login rate limiting yet, so short PINs are guessable.\n',
+    );
+  }
+}
 
 async function main() {
+  validateRoster();
+
   // Times are written with the IANA zone so Postgres resolves the offset. The
   // schedule is 12:00 AM to 5:00 PM on 7 September 2026, then selection to 6 PM.
   await query(
@@ -40,7 +70,13 @@ async function main() {
        timestamptz '2026-09-07 18:00:00 America/Indiana/Indianapolis',
        $1, $2
      )
-     on conflict (id) do nothing`,
+     on conflict (id) do update
+       set league_name = excluded.league_name,
+           timezone    = excluded.timezone,
+           -- Keeps league_size in step when the roster below changes. The
+           -- schedule is deliberately left alone so re-seeding cannot clobber
+           -- dates the commissioner has already adjusted.
+           league_size = excluded.league_size`,
     [20260907, MEMBERS.filter((m) => !m.admin).length],
   );
 
