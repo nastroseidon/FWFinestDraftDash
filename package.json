@@ -8,16 +8,21 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "simulate": "tsc scripts/simulate.ts --outDir .simulate --module commonjs --target es2022 --moduleResolution node --skipLibCheck && node .simulate/scripts/simulate.js"
+    "simulate": "tsc scripts/simulate.ts --outDir .simulate --module commonjs --target es2022 --moduleResolution node --skipLibCheck && node .simulate/scripts/simulate.js",
+    "db:migrate": "tsc scripts/migrate.ts --outDir .scripts --module commonjs --target es2022 --moduleResolution node --skipLibCheck --esModuleInterop && node -r ./scripts/env.js .scripts/scripts/migrate.js",
+    "db:seed": "tsc scripts/seed.ts --outDir .scripts --module commonjs --target es2022 --moduleResolution node --skipLibCheck --esModuleInterop && node -r ./scripts/env.js .scripts/scripts/seed.js",
+    "test:api": "tsc scripts/test-api.ts --outDir .scripts --module commonjs --target es2022 --moduleResolution node --skipLibCheck --esModuleInterop && node -r ./scripts/env.js .scripts/scripts/test-api.js"
   },
   "dependencies": {
     "next": "16.3.4",
+    "pg": "^8.23.0",
     "phaser": "^3.90.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

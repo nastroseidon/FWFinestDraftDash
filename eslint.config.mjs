@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Headless simulation build output.
     ".simulate/**",
+    ".scripts/**",
+    // Plain CommonJS, loaded by node -r for the db scripts.
+    "scripts/env.js",
   ]),
 ]);
 

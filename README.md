@@ -5,21 +5,32 @@ Fantasy Football League. You run up an infinite field with one control: tap anyw
 switch lanes. Your score is the exact number of yards you survive, and it is hidden until
 the run ends.
 
-**Status: Phase 2 (game polish) complete.** Practice mode works end to end with pixel art,
-milestone banners, and arcade sound. Official runs, Supabase, draft-position selection, and
-the commissioner dashboard are not built yet.
+**Status: Phase 3 (backend) complete.** Manager sign-in, practice persistence, the official
+run window, and one-attempt enforcement all work against Postgres. Draft-position selection
+(Phase 4) and the commissioner dashboard (Phase 5) are not built yet.
 
 ## Local setup
 
-Requires Node 20 or newer.
+Requires Node 20 or newer and Docker (for the local database).
 
 ```bash
 npm install
+cp .env.example .env.local
+docker run -d --name fwf-pg -e POSTGRES_PASSWORD=draftdash -e POSTGRES_DB=draftdash -p 55432:5432 postgres:17-alpine
+npm run db:migrate
+npm run db:seed
 npm run dev
 ```
 
 Open http://localhost:3000 on a phone-sized viewport (or a real phone on the same network
-via the network URL that `next dev` prints).
+via the network URL that `next dev` prints). The seed prints the manager names and PINs;
+sign in as any of them, or as `Commissioner` for an admin account.
+
+Set `SESSION_SECRET` in `.env.local` to any long random string:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
 
 ## Scripts
 
@@ -31,6 +42,9 @@ via the network URL that `next dev` prints).
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run simulate` | Headless course verification (see below) |
+| `npm run db:migrate` | Apply pending SQL migrations |
+| `npm run db:seed` | Insert league settings and members (safe to re-run) |
+| `npm run test:api` | Integration tests against a running dev server |
 
 ## Project structure
 
@@ -51,8 +65,20 @@ game/
   audio.ts            Web Audio arcade sounds, synthesised (no audio files)
   milestones.ts       Milestone thresholds and banner text
   scenes/RunScene.ts  Phaser scene: renders a Course and forwards taps
+lib/
+  db.ts               Postgres pool and transaction helper
+  auth.ts             scrypt PIN hashing
+  session.ts          Signed, httpOnly session cookie
+  phase.ts            Server-authoritative phase and countdown logic
+  members.ts          Member reads and the guarded score writes
+  api.ts              Route-handler helpers and score validation
+  client.ts           Browser-side API calls and types
+db/migrations/        SQL migrations, applied in name order
 scripts/
   simulate.ts         Headless verification of course invariants
+  migrate.ts          Migration runner
+  seed.ts             League settings and members
+  test-api.ts         Integration tests for the rules that must hold
 ```
 
 ## Why the simulation is separate from the scene
@@ -91,18 +117,57 @@ fetched, which keeps the payload small and means there is no art to source.
 Audio is never required: if the `AudioContext` cannot start, every call is a no-op. The
 sound toggle persists per device.
 
+## What the server decides, and why
+
+Anything a player could gain by lying about lives on the server:
+
+- **Time.** Phases come from Postgres `now()` compared against `league_settings`, never the
+  browser clock. Times are stored as `timestamptz` written with the IANA zone
+  `America/Indiana/Indianapolis`, so the DST offset is resolved by Postgres rather than
+  hardcoded. September resolves to UTC-4 and January to UTC-5, which is the point.
+- **The single attempt.** `POST /api/official/start` locks the member row and sets
+  `official_started_at` in one transaction. The attempt is spent before a frame is drawn,
+  so refreshing, force-quitting, or opening a second device buys nothing.
+- **The score.** `POST /api/official/complete` writes once. A second submission returns the
+  locked score instead of overwriting it.
+- **Identity.** The session is an httpOnly cookie signed with HMAC-SHA256. The payload is
+  only a member id; the signature is what stops one manager submitting as another.
+- **Privacy.** `GET /api/session` returns only the caller's own row. No ranks, no other
+  managers, no counts.
+
+`npm run test:api` covers all of the above, including two simultaneous starts racing for
+one attempt. The suite has been mutation-tested: removing the restart guard, the overwrite
+guard, or the window check each makes it fail.
+
 ## Hidden score
 
 Yardage is tracked internally and never rendered during a run. There are no yard markers,
 and the turf bands are deliberately not yard-aligned so they cannot be counted.
 
-## Configuration
+## Deployment
 
-Copy `.env.example` to `.env.local`. Nothing in it is used yet — Phase 1 runs entirely in
-the browser. Supabase arrives in Phase 3.
+Vercel, with a hosted Postgres. Any Postgres works — Neon, Vercel Postgres, or Supabase —
+because the app talks plain SQL over `pg` rather than a vendor SDK.
+
+1. Provision a Postgres database and copy its connection string.
+2. In Vercel, set `DATABASE_URL` and `SESSION_SECRET` as environment variables.
+3. Run `npm run db:migrate` and `npm run db:seed` with `DATABASE_URL` pointed at it.
+4. Deploy.
+
+The game is then linked from nicksmith.app alongside the other games.
 
 ## Not built yet
 
-Official run window and one-attempt enforcement, server-side event timing, manager PIN
-access, score persistence, draft-position selection, the commissioner dashboard, and the
-final reveal.
+Draft-position selection and its turn gating (Phase 4), the commissioner dashboard and
+final reveal (Phase 5), and PWA support (Phase 6).
+
+Two things are deliberately deferred rather than forgotten:
+
+- **Scores are reported by the client.** The guards above stop a player from getting a
+  second attempt or editing a locked score, but a determined manager with dev tools could
+  submit a number they did not earn. `game/course.ts` is Phaser-free and deterministic
+  precisely so a submitted input trace could be replayed server-side to verify it, if the
+  league wants that.
+- **Abandoned official runs.** A run that starts and never finishes currently stays
+  incomplete. The spec's rule (score 0 after the deadline, flagged for the commissioner) is
+  part of the Phase 5 ranking work.

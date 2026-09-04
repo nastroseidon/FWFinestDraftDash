@@ -45,3 +45,6 @@ next-env.d.ts
 
 # Keep the example env file tracked
 !.env.example
+
+# Compiled helper scripts
+.scripts/
