@@ -716,3 +716,31 @@ body:has(.app.scrollable) {
   line-height: 1.9;
   opacity: 0.8;
 }
+
+/* --- Official run confirmation popups --- */
+
+.confirmOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(6, 18, 12, 0.72);
+}
+
+.confirmBox {
+  width: min(88vw, 340px);
+  padding: 22px 18px;
+  text-align: center;
+  background: var(--fwf-navy);
+  border: 4px solid var(--fwf-cream);
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.55);
+}
+
+.confirmText {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--fwf-cream);
+}
