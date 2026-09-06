@@ -19,6 +19,7 @@ export type AdminMember = {
   is_admin: boolean;
   practice_best: number;
   practice_attempts: number;
+  practice_total: number;
   official_started_at: string | null;
   official_completed_at: string | null;
   official_score: number | null;
@@ -53,6 +54,7 @@ export type AdminOverview = {
     slotsTaken: number;
     practiceRuns: number;
     neverPractised: number;
+    practiceYards: number;
   };
   takenSlots: number[];
 };

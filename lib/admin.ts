@@ -23,6 +23,8 @@ export type AdminMember = {
   practice_best: number;
   /** How many practice runs they have finished. Every run is logged. */
   practice_attempts: number;
+  /** Every practice yard they have ever run, added up. */
+  practice_total: number;
   official_started_at: Date | null;
   official_completed_at: Date | null;
   official_score: number | null;
@@ -63,6 +65,8 @@ export type AdminOverview = {
     practiceRuns: number;
     /** Managers who have not touched practice at all. */
     neverPractised: number;
+    /** Every practice yard run by the whole league. */
+    practiceYards: number;
   };
   takenSlots: number[];
 };
@@ -89,10 +93,13 @@ export async function adminOverview(): Promise<AdminOverview> {
            m.selection_priority, m.selected_draft_slot, m.selected_at,
            (m.official_started_at is not null and m.official_completed_at is null) as abandoned,
            (m.official_started_at is null) as never_ran,
-           coalesce(p.attempts, 0)::int as practice_attempts
+           coalesce(p.attempts, 0)::int as practice_attempts,
+           coalesce(p.total_yards, 0)::int as practice_total
       from league_members m
       left join (
-        select member_id, count(*) as attempts
+        select member_id,
+               count(*) as attempts,
+               sum(coalesce(score, 0)) as total_yards
           from run_events
          where mode = 'practice' and completion_status = 'completed'
          group by member_id
@@ -133,6 +140,7 @@ export async function adminOverview(): Promise<AdminOverview> {
       slotsTaken: members.filter((m) => m.selected_draft_slot !== null).length,
       practiceRuns: members.reduce((sum, m) => sum + m.practice_attempts, 0),
       neverPractised: members.filter((m) => m.practice_attempts === 0).length,
+      practiceYards: members.reduce((sum, m) => sum + m.practice_total, 0),
     },
     takenSlots: members
       .map((m) => m.selected_draft_slot)

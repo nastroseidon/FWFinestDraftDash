@@ -172,6 +172,8 @@ export default function AdminPage() {
           </dd>
           <dt>Practice runs, all managers</dt>
           <dd>{counts.practiceRuns.toLocaleString('en-US')}</dd>
+          <dt>Practice yards, all managers</dt>
+          <dd>{counts.practiceYards.toLocaleString('en-US')}</dd>
           <dt>Never practised</dt>
           <dd className={counts.neverPractised ? 'warn' : ''}>{counts.neverPractised}</dd>
         </dl>
@@ -187,6 +189,7 @@ export default function AdminPage() {
                 <th>Manager</th>
                 <th>Runs</th>
                 <th>Practice best</th>
+                <th>Practice total</th>
                 <th>Official</th>
                 <th>State</th>
                 <th>Slot</th>
@@ -295,6 +298,7 @@ function ManagerRow({
       </td>
       <td className={m.practice_attempts === 0 ? 'warn' : ''}>{m.practice_attempts}</td>
       <td>{m.practice_best.toLocaleString('en-US')}</td>
+      <td>{m.practice_total.toLocaleString('en-US')}</td>
       <td>{m.official_score === null ? '—' : m.official_score.toLocaleString('en-US')}</td>
       <td className={m.abandoned ? 'warn' : ''}>{state}</td>
       <td>{m.selected_draft_slot ?? '—'}</td>

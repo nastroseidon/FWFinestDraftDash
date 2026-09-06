@@ -181,8 +181,21 @@ async function main() {
     check('the best score is separate from the count', row(names[0]).practice_best === 800,
       `${row(names[0]).practice_best}`);
 
+    // 120 + 340 + 90 + 800 + 455
+    check('every practice yard is added up', row(names[0]).practice_total === 1805,
+      `${row(names[0]).practice_total}`);
+    check('a single run totals that run', row(names[1]).practice_total === 210,
+      `${row(names[1]).practice_total}`);
+    check('somebody who never played totals zero', row(names[2]).practice_total === 0);
+    check(
+      'the total is not just the best score repeated',
+      row(names[0]).practice_total !== row(names[0]).practice_best * row(names[0]).practice_attempts,
+    );
+
     check('the league total adds up', after.body.counts.practiceRuns === 6,
       `${after.body.counts.practiceRuns}`);
+    check('the league yardage adds up', after.body.counts.practiceYards === 1805 + 210,
+      `${after.body.counts.practiceYards}`);
     check('never-practised counts the rest', after.body.counts.neverPractised === MEMBERS.length - 2,
       `${after.body.counts.neverPractised}`);
 
@@ -195,10 +208,13 @@ async function main() {
     );
     check('an official run does not count as practice', grinderRow.practice_attempts === 5,
       `${grinderRow.practice_attempts}`);
+    check('nor does it add to the practice yardage', grinderRow.practice_total === 1805,
+      `${grinderRow.practice_total}`);
 
     await resetAll(admin);
     const wiped = await admin.get('/api/admin/overview');
     check('a league reset clears the counts', wiped.body.counts.practiceRuns === 0);
+    check('and the yardage', wiped.body.counts.practiceYards === 0);
   }
 
   console.log('\nOpening and closing the windows');
