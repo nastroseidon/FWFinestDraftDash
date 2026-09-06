@@ -170,6 +170,10 @@ export default function AdminPage() {
           <dd>
             {counts.slotsTaken} / {league.leagueSize}
           </dd>
+          <dt>Practice runs, all managers</dt>
+          <dd>{counts.practiceRuns.toLocaleString('en-US')}</dd>
+          <dt>Never practised</dt>
+          <dd className={counts.neverPractised ? 'warn' : ''}>{counts.neverPractised}</dd>
         </dl>
       </section>
 
@@ -181,7 +185,8 @@ export default function AdminPage() {
               <tr>
                 <th>#</th>
                 <th>Manager</th>
-                <th>Practice</th>
+                <th>Runs</th>
+                <th>Practice best</th>
                 <th>Official</th>
                 <th>State</th>
                 <th>Slot</th>
@@ -288,6 +293,7 @@ function ManagerRow({
         {m.display_name}
         {m.is_admin ? ' *' : ''}
       </td>
+      <td className={m.practice_attempts === 0 ? 'warn' : ''}>{m.practice_attempts}</td>
       <td>{m.practice_best.toLocaleString('en-US')}</td>
       <td>{m.official_score === null ? '—' : m.official_score.toLocaleString('en-US')}</td>
       <td className={m.abandoned ? 'warn' : ''}>{state}</td>

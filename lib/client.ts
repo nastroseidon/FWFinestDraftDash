@@ -18,6 +18,7 @@ export type AdminMember = {
   team_name: string | null;
   is_admin: boolean;
   practice_best: number;
+  practice_attempts: number;
   official_started_at: string | null;
   official_completed_at: string | null;
   official_score: number | null;
@@ -45,7 +46,14 @@ export type AdminOverview = {
   };
   members: AdminMember[];
   onTheClock: { id: string; display_name: string } | null;
-  counts: { completed: number; abandoned: number; neverRan: number; slotsTaken: number };
+  counts: {
+    completed: number;
+    abandoned: number;
+    neverRan: number;
+    slotsTaken: number;
+    practiceRuns: number;
+    neverPractised: number;
+  };
   takenSlots: number[];
 };
 

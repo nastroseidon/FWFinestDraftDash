@@ -21,6 +21,8 @@ export type AdminMember = {
   team_name: string | null;
   is_admin: boolean;
   practice_best: number;
+  /** How many practice runs they have finished. Every run is logged. */
+  practice_attempts: number;
   official_started_at: Date | null;
   official_completed_at: Date | null;
   official_score: number | null;
@@ -57,6 +59,10 @@ export type AdminOverview = {
     abandoned: number;
     neverRan: number;
     slotsTaken: number;
+    /** Practice runs finished across the whole league. */
+    practiceRuns: number;
+    /** Managers who have not touched practice at all. */
+    neverPractised: number;
   };
   takenSlots: number[];
 };
@@ -78,13 +84,20 @@ export async function adminOverview(): Promise<AdminOverview> {
   }
 
   const members = await query<AdminMember>(`
-    select id, display_name, team_name, is_admin, practice_best,
-           official_started_at, official_completed_at, official_score,
-           selection_priority, selected_draft_slot, selected_at,
-           (official_started_at is not null and official_completed_at is null) as abandoned,
-           (official_started_at is null) as never_ran
-      from league_members
-     order by selection_priority nulls last, display_name
+    select m.id, m.display_name, m.team_name, m.is_admin, m.practice_best,
+           m.official_started_at, m.official_completed_at, m.official_score,
+           m.selection_priority, m.selected_draft_slot, m.selected_at,
+           (m.official_started_at is not null and m.official_completed_at is null) as abandoned,
+           (m.official_started_at is null) as never_ran,
+           coalesce(p.attempts, 0)::int as practice_attempts
+      from league_members m
+      left join (
+        select member_id, count(*) as attempts
+          from run_events
+         where mode = 'practice' and completion_status = 'completed'
+         group by member_id
+      ) p on p.member_id = m.id
+     order by m.selection_priority nulls last, m.display_name
   `);
 
   const onClock = await query<{ id: string; display_name: string }>(`
@@ -118,6 +131,8 @@ export async function adminOverview(): Promise<AdminOverview> {
       abandoned: members.filter((m) => m.abandoned).length,
       neverRan: members.filter((m) => m.never_ran).length,
       slotsTaken: members.filter((m) => m.selected_draft_slot !== null).length,
+      practiceRuns: members.reduce((sum, m) => sum + m.practice_attempts, 0),
+      neverPractised: members.filter((m) => m.practice_attempts === 0).length,
     },
     takenSlots: members
       .map((m) => m.selected_draft_slot)

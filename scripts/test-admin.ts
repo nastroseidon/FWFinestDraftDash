@@ -148,6 +148,59 @@ async function main() {
     check('it reports league size', res.body.league?.leagueSize === players().length);
   }
 
+  console.log('\nPractice attempts are counted');
+  {
+    await resetAll(admin);
+    const names = ROSTER.map((m) => m.name);
+
+    const before = await admin.get('/api/admin/overview');
+    check(
+      'everyone starts on zero practice runs',
+      before.body.members.every((m: { practice_attempts: number }) => m.practice_attempts === 0),
+    );
+    check('the league total starts at zero', before.body.counts.practiceRuns === 0);
+    check('everyone counts as never practised', before.body.counts.neverPractised === MEMBERS.length);
+
+    // One manager grinds, another has a single go, the rest do nothing.
+    const grinder = await new Client().signIn(names[0], PINS[names[0]]);
+    for (const score of [120, 340, 90, 800, 455]) {
+      await grinder.post('/api/practice', { score });
+    }
+    const casual = await new Client().signIn(names[1], PINS[names[1]]);
+    await casual.post('/api/practice', { score: 210 });
+
+    const after = await admin.get('/api/admin/overview');
+    const row = (n: string) =>
+      after.body.members.find((m: { display_name: string }) => m.display_name === n);
+
+    check('five practice runs are counted', row(names[0]).practice_attempts === 5,
+      `${row(names[0]).practice_attempts}`);
+    check('one practice run is counted', row(names[1]).practice_attempts === 1);
+    check('somebody who never played stays on zero', row(names[2]).practice_attempts === 0);
+
+    check('the best score is separate from the count', row(names[0]).practice_best === 800,
+      `${row(names[0]).practice_best}`);
+
+    check('the league total adds up', after.body.counts.practiceRuns === 6,
+      `${after.body.counts.practiceRuns}`);
+    check('never-practised counts the rest', after.body.counts.neverPractised === MEMBERS.length - 2,
+      `${after.body.counts.neverPractised}`);
+
+    // An official run must not inflate the practice count.
+    await grinder.post('/api/official/start');
+    await grinder.post('/api/official/complete', { score: 1500 });
+    const withOfficial = await admin.get('/api/admin/overview');
+    const grinderRow = withOfficial.body.members.find(
+      (m: { display_name: string }) => m.display_name === names[0],
+    );
+    check('an official run does not count as practice', grinderRow.practice_attempts === 5,
+      `${grinderRow.practice_attempts}`);
+
+    await resetAll(admin);
+    const wiped = await admin.get('/api/admin/overview');
+    check('a league reset clears the counts', wiped.body.counts.practiceRuns === 0);
+  }
+
   console.log('\nOpening and closing the windows');
   {
     await admin.post('/api/admin/window', { which: 'official', value: true });
