@@ -9,7 +9,7 @@
  */
 import { pool, query } from '../lib/db';
 import { loadPins } from './pins';
-import { MEMBERS, players } from './roster';
+import { players } from './roster';
 
 const BASE = process.env.TEST_BASE ?? 'http://localhost:3000';
 const PINS = loadPins();
@@ -73,6 +73,35 @@ async function resetAll() {
 }
 
 /** Moves practice_close_at relative to now, to test either side of it. */
+/** The real official window has closed, so these fixtures force it open. */
+async function setOfficialOpen(open: boolean | null) {
+  // Selection wins over the official window in phaseFor, so opening official
+  // runs means shutting selection too.
+  await query(
+    `update league_settings
+        set official_open_override = $1,
+            selection_open_override = case when $1 is true then false else null end
+      where id = 1`,
+    [open],
+  );
+}
+
+/**
+ * Gives the fixtures a coherent timeline of their own, since the league's real
+ * schedule has moved into the past.
+ */
+async function applyTestSchedule() {
+  await query(`
+    update league_settings
+       set official_open_at   = now() - interval '1 day',
+           practice_close_at  = now() + interval '60 minutes',
+           official_close_at  = now() + interval '120 minutes',
+           selection_open_at  = now() + interval '120 minutes',
+           selection_close_at = now() + interval '180 minutes'
+     where id = 1
+  `);
+}
+
 async function setPracticeCloses(offsetMinutes: number) {
   await query(
     `update league_settings set practice_close_at = now() + ($1 || ' minutes')::interval where id = 1`,
@@ -93,19 +122,25 @@ async function restoreSchedule() {
 async function restoreRealSchedule() {
   await query(`
     update league_settings
-       set practice_close_at = timestamptz '2026-09-07 00:00:00 America/Indiana/Indianapolis'
+       set official_open_at   = timestamptz '2026-09-04 00:00:00 America/Indiana/Indianapolis',
+           practice_close_at  = timestamptz '2026-09-07 00:00:00 America/Indiana/Indianapolis',
+           official_close_at  = timestamptz '2026-09-07 12:00:00 America/Indiana/Indianapolis',
+           selection_open_at  = timestamptz '2026-09-07 12:00:00 America/Indiana/Indianapolis',
+           selection_close_at = timestamptz '2026-09-07 18:00:00 America/Indiana/Indianapolis'
      where id = 1
   `);
 }
 
 async function main() {
   console.log(`Testing ${BASE}\n`);
+  await applyTestSchedule();
   const names = ROSTER.map((m) => m.name);
 
   console.log('Official runs are open right now');
   {
     await resetAll();
     await restoreSchedule();
+    await setOfficialOpen(true);
     const c = await new Client().signIn(names[0], PINS[names[0]]);
     const s = await c.get('/api/session');
 
@@ -126,6 +161,7 @@ async function main() {
   console.log('\nPractice has its own deadline');
   {
     await resetAll();
+    await setOfficialOpen(true);
     await setPracticeCloses(60);
     const c = await new Client().signIn(names[1], PINS[names[1]]);
 
@@ -160,7 +196,7 @@ async function main() {
   console.log('\nSelection opens the moment the last run lands');
   {
     await resetAll();
-    await restoreSchedule();
+    await applyTestSchedule();
 
     // Everyone but the last manager finishes.
     for (let i = 0; i < names.length - 1; i += 1) {
@@ -229,6 +265,7 @@ async function main() {
 
   await resetAll();
   await restoreRealSchedule();
+  await setOfficialOpen(null);
 
   console.log(`\n${passed} passed, ${failures.length} failed`);
   if (failures.length) {

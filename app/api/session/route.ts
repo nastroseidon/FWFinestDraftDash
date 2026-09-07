@@ -1,4 +1,5 @@
 import { currentMember, json } from '@/lib/api';
+import { draftStatus } from '@/lib/draft';
 import {
   loadSettings,
   msUntilOfficialCloses,
@@ -21,6 +22,11 @@ export async function GET() {
   const officialAvailable =
     phase === 'official' && !member.official_started_at && !member.official_completed_at;
   const canPractice = practiceOpen(settings);
+
+  // Whether it is their turn to pick. Their own turn only: this says nothing
+  // about anybody else, which is the same rule the draft screen follows.
+  const onTheClock =
+    phase === 'selection' ? (await draftStatus(member.id)).onTheClock : false;
 
   return json({
     signedIn: true,
@@ -49,6 +55,7 @@ export async function GET() {
       officialCloseAt: settings.official_close_at,
       allRunsComplete: settings.all_runs_complete_at !== null,
       revealAvailable: settings.reveal_released,
+      onTheClock,
       serverNow: settings.server_now,
     },
   });

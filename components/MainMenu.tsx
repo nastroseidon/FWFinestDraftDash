@@ -45,6 +45,10 @@ export default function MainMenu({
           DASH
         </h1>
 
+        {league.onTheClock ? (
+          <p className="onClockAlert">PICK YOUR DRAFT POSITION NOW</p>
+        ) : null}
+
         <p className="who">
           {member.displayName.toUpperCase()}
           {member.teamName ? ` — ${member.teamName.toUpperCase()}` : ''}
@@ -62,9 +66,15 @@ export default function MainMenu({
           {officialLabel}
         </button>
 
-        <button className="btn secondary" onClick={onDraft}>
-          DRAFT STATUS
-        </button>
+        {league.onTheClock ? (
+          <button className="btn danger onClockBtn" onClick={onDraft}>
+            YOU ARE ON THE CLOCK
+          </button>
+        ) : (
+          <button className="btn secondary" onClick={onDraft}>
+            DRAFT STATUS
+          </button>
+        )}
 
         {revealReady ? (
           <button className="btn danger" onClick={onReveal}>

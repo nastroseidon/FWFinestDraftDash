@@ -83,14 +83,46 @@ async function resetAll(admin: Client) {
   await admin.post('/api/admin/reset-league', { confirm: 'RESET' });
 }
 
-/** Practice has a real deadline that may already have passed. */
+/**
+ * Gives the fixtures a coherent timeline of their own.
+ *
+ * These tests used to lean on the league's real schedule, which worked until
+ * that schedule moved into the past. A window_order constraint keeps the dates
+ * consistent, so a fixture cannot push one of them around in isolation.
+ */
+async function applyTestSchedule() {
+  await query(`
+    update league_settings
+       set official_open_at   = now() - interval '1 day',
+           practice_close_at  = now() + interval '60 minutes',
+           official_close_at  = now() + interval '120 minutes',
+           selection_open_at  = now() + interval '120 minutes',
+           selection_close_at = now() + interval '180 minutes'
+     where id = 1
+  `);
+}
+
+/** Puts the league's real dates back. */
+async function restoreRealSchedule() {
+  await query(`
+    update league_settings
+       set official_open_at   = timestamptz '2026-09-04 00:00:00 America/Indiana/Indianapolis',
+           practice_close_at  = timestamptz '2026-09-07 00:00:00 America/Indiana/Indianapolis',
+           official_close_at  = timestamptz '2026-09-07 12:00:00 America/Indiana/Indianapolis',
+           selection_open_at  = timestamptz '2026-09-07 12:00:00 America/Indiana/Indianapolis',
+           selection_close_at = timestamptz '2026-09-07 18:00:00 America/Indiana/Indianapolis'
+     where id = 1
+  `);
+}
+
+/** Practice deadline, within the fixture timeline. */
 async function setPracticeOpen(open: boolean) {
-  await query(
-    `update league_settings
-        set practice_close_at = now() + ($1 || ' minutes')::interval
-      where id = 1`,
-    [open ? '60' : '-1'],
-  );
+  await applyTestSchedule();
+  if (!open) {
+    await query(
+      `update league_settings set practice_close_at = now() - interval '1 minute' where id = 1`,
+    );
+  }
 }
 
 async function setScores(scores: Record<string, number | null>) {
@@ -107,6 +139,7 @@ async function setScores(scores: Record<string, number | null>) {
 
 async function main() {
   console.log(`Testing ${BASE}\n`);
+  await applyTestSchedule();
 
   const admin = await new Client().signIn(ADMIN.name, ADMIN.pin);
   const player = await new Client().signIn(PLAYER.name, PLAYER.pin);
@@ -210,7 +243,10 @@ async function main() {
     check('never-practised counts the rest', after.body.counts.neverPractised === MEMBERS.length - 2,
       `${after.body.counts.neverPractised}`);
 
-    // An official run must not inflate the practice count.
+    // An official run must not inflate the practice count. Selection has to be
+    // shut as well, since it takes precedence over the official window.
+    await admin.post('/api/admin/window', { which: 'selection', value: false });
+    await admin.post('/api/admin/window', { which: 'official', value: true });
     await grinder.post('/api/official/start');
     await grinder.post('/api/official/complete', { score: 1500 });
     const withOfficial = await admin.get('/api/admin/overview');
@@ -227,6 +263,41 @@ async function main() {
     check('a league reset clears the counts', wiped.body.counts.practiceRuns === 0);
     check('and the yardage', wiped.body.counts.practiceYards === 0);
     await setPracticeOpen(false);
+  }
+
+  console.log('\nThe commissioner can reopen practice');
+  {
+    await resetAll(admin);
+    await setPracticeOpen(false);
+
+    const player2 = await new Client().signIn(PLAYER.name, PLAYER.pin);
+    let shut = await player2.get('/api/session');
+    check('practice starts shut', shut.body.league?.practiceOpen === false);
+    const refused = await player2.post('/api/practice', { score: 300 });
+    check('and a practice score is refused', refused.status === 409, `got ${refused.status}`);
+
+    const opened = await admin.post('/api/admin/window', { which: 'practice', value: true });
+    check('the commissioner can reopen it', opened.status === 200, `got ${opened.status}`);
+
+    const ov = await admin.get('/api/admin/overview');
+    check('the dashboard shows it open', ov.body.league?.practiceOpen === true);
+
+    const now = await player2.get('/api/session');
+    check('players see it open again', now.body.league?.practiceOpen === true);
+    const accepted = await player2.post('/api/practice', { score: 300 });
+    check('and a practice score is accepted', accepted.status === 200, `got ${accepted.status}`);
+
+    // Reopening practice must not reopen official runs or disturb the draft.
+    check('the phase is untouched', ov.body.league?.phase === shut.body.league?.phase,
+      `${shut.body.league?.phase} -> ${ov.body.league?.phase}`);
+
+    const closedAgain = await admin.post('/api/admin/window', { which: 'practice', value: false });
+    check('and shut it again', closedAgain.status === 200);
+    shut = await player2.get('/api/session');
+    check('players see it shut', shut.body.league?.practiceOpen === false);
+
+    const bad = await admin.post('/api/admin/window', { which: 'practice', value: null });
+    check('practice rejects a schedule value', bad.status === 400, `got ${bad.status}`);
   }
 
   console.log('\nOpening and closing the windows');
@@ -310,7 +381,8 @@ async function main() {
 
     // The point of a reset is that they can run again. That means the league
     // has to come out of selection phase, or official runs stay shut.
-    await admin.post('/api/admin/window', { which: 'selection', value: null });
+    await admin.post('/api/admin/window', { which: 'selection', value: false });
+    await admin.post('/api/admin/window', { which: 'official', value: true });
     const back = await admin.get('/api/admin/overview');
     check(
       'the league returns to taking official runs',
@@ -578,18 +650,17 @@ async function main() {
        where all_runs_complete_at is not null or completion_notified_at is not null
     `);
     check('the completion stamps are cleared', stamps[0].n === '0');
-    check(
-      'the league is back to taking official runs',
-      after.body.league.phase === 'official',
-      after.body.league.phase,
-    );
 
+
+    await admin.post('/api/admin/window', { which: 'selection', value: false });
+    await admin.post('/api/admin/window', { which: 'official', value: true });
     const stillWorks = await new Client().signIn(PLAYER.name, PLAYER.pin);
     const session = await stillWorks.get('/api/session');
     check('access codes survive a reset', session.body.signedIn === true);
   }
 
   await resetAll(admin);
+  await restoreRealSchedule();
   await admin.post('/api/admin/window', { which: 'official', value: null });
   await admin.post('/api/admin/window', { which: 'selection', value: null });
 

@@ -2,7 +2,7 @@ import { PoolClient } from 'pg';
 import { query, transaction } from './db';
 import { dealLeftoverSlots, ensureRankings } from './draft';
 import { releaseRevealIfComplete } from './reveal';
-import { loadSettings, phaseFor } from './phase';
+import { loadSettings, phaseFor, practiceOpen } from './phase';
 
 /**
  * Commissioner-only reads and overrides.
@@ -52,6 +52,8 @@ export type AdminOverview = {
     selectionOpenOverride: boolean | null;
     rankingsFrozen: boolean;
     revealReleased: boolean;
+    practiceOpen: boolean;
+    practiceCloseAt: string;
   };
   members: AdminMember[];
   /** Who is on the clock right now, or null. */
@@ -130,6 +132,8 @@ export async function adminOverview(): Promise<AdminOverview> {
       rankingsFrozen: !!(settings as unknown as { rankings_frozen_at: Date | null })
         .rankings_frozen_at,
       revealReleased: settings.reveal_released,
+      practiceOpen: practiceOpen(settings),
+      practiceCloseAt: settings.practice_close_at.toISOString(),
     },
     members,
     onTheClock: phase === 'selection' ? onClock[0] ?? null : null,
@@ -157,6 +161,22 @@ export async function setWindowOverride(
   const column =
     which === 'official' ? 'official_open_override' : 'selection_open_override';
   await query(`update league_settings set ${column} = $1 where id = 1`, [value]);
+}
+
+/**
+ * Opens or closes practice outright.
+ *
+ * Practice has a deadline rather than an override, so this moves the deadline:
+ * a week out to open it, a minute ago to shut it. It is independent of every
+ * other window, so the league can practise again after the draft if it likes.
+ */
+export async function setPracticeOpen(open: boolean) {
+  await query(
+    `update league_settings
+        set practice_close_at = now() + ($1 || ' minutes')::interval
+      where id = 1`,
+    [open ? String(60 * 24 * 7) : '-1'],
+  );
 }
 
 export type ResetResult =

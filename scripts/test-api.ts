@@ -86,22 +86,68 @@ async function resetMember(name: string) {
   );
 }
 
-/** Practice has a real deadline that may already have passed. */
-async function setPracticeOpen(open: boolean) {
-  await query(
-    `update league_settings
-        set practice_close_at = now() + ($1 || ' minutes')::interval
-      where id = 1`,
-    [open ? '60' : '-1'],
-  );
+/**
+ * Gives the fixtures a coherent timeline of their own.
+ *
+ * These tests used to lean on the league's real schedule, which worked until
+ * that schedule moved into the past. A window_order constraint keeps the dates
+ * consistent, so a fixture cannot push one of them around in isolation.
+ */
+async function applyTestSchedule() {
+  await query(`
+    update league_settings
+       set official_open_at   = now() - interval '1 day',
+           practice_close_at  = now() + interval '60 minutes',
+           official_close_at  = now() + interval '120 minutes',
+           selection_open_at  = now() + interval '120 minutes',
+           selection_close_at = now() + interval '180 minutes'
+     where id = 1
+  `);
 }
 
+/** Puts the league's real dates back. */
+async function restoreRealSchedule() {
+  await query(`
+    update league_settings
+       set official_open_at   = timestamptz '2026-09-04 00:00:00 America/Indiana/Indianapolis',
+           practice_close_at  = timestamptz '2026-09-07 00:00:00 America/Indiana/Indianapolis',
+           official_close_at  = timestamptz '2026-09-07 12:00:00 America/Indiana/Indianapolis',
+           selection_open_at  = timestamptz '2026-09-07 12:00:00 America/Indiana/Indianapolis',
+           selection_close_at = timestamptz '2026-09-07 18:00:00 America/Indiana/Indianapolis'
+     where id = 1
+  `);
+}
+
+/** Practice deadline, within the fixture timeline. */
+async function setPracticeOpen(open: boolean) {
+  await applyTestSchedule();
+  if (!open) {
+    await query(
+      `update league_settings set practice_close_at = now() - interval '1 minute' where id = 1`,
+    );
+  }
+}
+
+/**
+ * Puts the league into a known window state.
+ *
+ * Selection takes precedence over the official window in phaseFor, by design:
+ * once selection is under way, official runs are over. So forcing official runs
+ * open also means forcing selection shut, or the phase stays 'selection'.
+ */
 async function setOfficialWindow(open: boolean | null) {
-  await query('update league_settings set official_open_override = $1 where id = 1', [open]);
+  await query(
+    `update league_settings
+        set official_open_override = $1,
+            selection_open_override = case when $1 is true then false else null end
+      where id = 1`,
+    [open],
+  );
 }
 
 async function main() {
   console.log(`Testing ${BASE}\n`);
+  await applyTestSchedule();
 
   await resetMember(P1.name);
   await resetMember(P2.name);
@@ -146,11 +192,11 @@ async function main() {
     const c = new Client();
     await c.post('/api/login', { name: P1.name, pin: P1.pin });
 
-    // Official runs are open from the moment the league goes live, so the
-    // interesting case is the commissioner shutting the window.
-    await setOfficialWindow(null);
+    // Forced open rather than left to the schedule: the league's real official
+    // window has since closed, so the schedule no longer proves anything here.
+    await setOfficialWindow(true);
     const open = await c.get('/api/session');
-    check('phase is official on the schedule', open.body.league?.phase === 'official',
+    check('a forced-open window offers a run', open.body.league?.phase === 'official',
       open.body.league?.phase);
     check('an official run is offered', open.body.league?.officialAvailable === true);
 
@@ -161,7 +207,7 @@ async function main() {
     const shutSession = await c.get('/api/session');
     check('and stops offering one', shutSession.body.league?.officialAvailable === false);
 
-    await setOfficialWindow(null);
+    await setOfficialWindow(true);
   }
 
   console.log('\nOne attempt, no restarts');
@@ -318,6 +364,7 @@ async function main() {
   }
 
   // Leave the league as we found it.
+  await restoreRealSchedule();
   await setOfficialWindow(null);
   for (const p of [P1, P2, P3, P4, P5, ADMIN]) {
     await resetMember(p.name);

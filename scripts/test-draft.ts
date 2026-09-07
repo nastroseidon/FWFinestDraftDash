@@ -239,6 +239,104 @@ async function main() {
     );
   }
 
+  console.log('\nThe main menu says when it is your turn');
+  {
+    await resetDraft(scores);
+    await setSelectionOpen(true);
+
+    const top = await new Client(names[0]).signIn();
+    const next = await new Client(names[1]).signIn();
+
+    let mine = await top.get('/api/session');
+    let theirs = await next.get('/api/session');
+    check('the top ranked manager is told on the menu', mine.body.league?.onTheClock === true);
+    check('the next one is not', theirs.body.league?.onTheClock === false);
+
+    // It must not leak who else is up.
+    check(
+      'it says nothing about who else is picking',
+      !JSON.stringify(theirs.body).includes(names[0]),
+    );
+
+    // And it moves along with the draft.
+    await top.get('/api/draft/status');
+    await top.post('/api/draft/claim', { slot: 6 });
+
+    mine = await top.get('/api/session');
+    theirs = await next.get('/api/session');
+    check('it clears once they have picked', mine.body.league?.onTheClock === false);
+    check('and lights up for the next manager', theirs.body.league?.onTheClock === true);
+
+    // A no-show never gets told it is their turn, because it never is.
+    const noShowScores: Record<string, number | null> = {};
+    names.forEach((n, i) => {
+      noShowScores[n] = i < 6 ? 5000 - i * 100 : null;
+    });
+    await resetDraft(noShowScores);
+    await setSelectionOpen(true);
+    await query('update league_settings set official_open_override = false where id = 1');
+    const noShow = await new Client(names[10]).signIn();
+    const s2 = await noShow.get('/api/session');
+    check('a no-show is never told they are on the clock', s2.body.league?.onTheClock === false);
+    await query('update league_settings set official_open_override = null where id = 1');
+
+    // With the window shut nobody is on the clock. Forced shut rather than
+    // left to the schedule, since the real selection window is now open.
+    await resetDraft(scores);
+    await setSelectionOpen(false);
+    const closed = await new Client(names[0]).signIn().then((c) => c.get('/api/session'));
+    check('nobody is on the clock while selection is shut', closed.body.league?.onTheClock === false);
+    await setSelectionOpen(true);
+  }
+
+  console.log('\nA waiting player is told where they are in the queue');
+  {
+    await resetDraft(scores);
+    await setSelectionOpen(true);
+
+    const first = await new Client(names[0]).signIn();
+    const second = await new Client(names[1]).signIn();
+    const fifth = await new Client(names[4]).signIn();
+
+    const a = await first.get('/api/draft/status');
+    let b = await second.get('/api/draft/status');
+    let e = await fifth.get('/api/draft/status');
+
+    check('the manager on the clock has no queue position', a.body.picksAhead === null);
+    check('the next in line has one pick ahead', b.body.picksAhead === 1, `${b.body.picksAhead}`);
+    check('the fifth has four ahead', e.body.picksAhead === 4, `${e.body.picksAhead}`);
+
+    check(
+      'the queue count names nobody',
+      !names.filter((n) => n !== names[4]).some((n) => JSON.stringify(e.body).includes(n)),
+    );
+
+    // The queue shortens as picks land.
+    await first.post('/api/draft/claim', { slot: 12 });
+    b = await second.get('/api/draft/status');
+    e = await fifth.get('/api/draft/status');
+    check('the next manager is now on the clock', b.body.onTheClock === true);
+    check('and the fifth moves up one', e.body.picksAhead === 3, `${e.body.picksAhead}`);
+
+    // Once they have picked there is no queue position to report.
+    await second.post('/api/draft/claim', { slot: 11 });
+    const done = await second.get('/api/draft/status');
+    check('a manager who has picked has no queue position', done.body.picksAhead === null);
+
+    // No-shows are not queued: they never get a turn.
+    const noShowScores: Record<string, number | null> = {};
+    names.forEach((n, i) => {
+      noShowScores[n] = i < 6 ? 5000 - i * 100 : null;
+    });
+    await resetDraft(noShowScores);
+    await setSelectionOpen(true);
+    await query('update league_settings set official_open_override = false where id = 1');
+    const noShow = await new Client(names[10]).signIn();
+    const ns = await noShow.get('/api/draft/status');
+    check('a no-show gets no queue position', ns.body.picksAhead === null, `${ns.body.picksAhead}`);
+    await query('update league_settings set official_open_override = null where id = 1');
+  }
+
   console.log('\nA waiting player learns nothing about anyone else');
   {
     const waiting = await new Client(names[5]).signIn();
@@ -564,7 +662,9 @@ async function main() {
   console.log('\nSelection is closed outside the window');
   {
     await resetDraft(scores);
-    await setSelectionOpen(null); // follow the schedule, which is in the future
+    // Forced shut. The league's real selection window has since opened, so
+    // leaving this to the schedule would no longer test anything.
+    await setSelectionOpen(false);
     const c = await new Client(names[0]).signIn();
 
     const status = await c.get('/api/draft/status');

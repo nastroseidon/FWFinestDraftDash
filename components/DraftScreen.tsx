@@ -113,7 +113,7 @@ export default function DraftScreen({ onMenu }: { onMenu: () => void }) {
           You do not get to choose. Whatever positions are left over will be dealt
           out at random once everybody else has picked.
         </p>
-        <p className="warnBody muted">Should have run.</p>
+        <p className="queueBox">IF YOU MISS SCHOOL, YOU MISS OUT.</p>
         <button className="btn secondary" onClick={onMenu}>
           MAIN MENU
         </button>
@@ -121,13 +121,27 @@ export default function DraftScreen({ onMenu }: { onMenu: () => void }) {
     );
   }
 
-  // Waiting for their turn. Deliberately says nothing about anyone else.
+  // Waiting for their turn. Says where they are in the queue and nothing else:
+  // not who is ahead of them, not what anyone scored.
   if (!status.onTheClock) {
+    const ahead = status.picksAhead;
     return (
       <Shell>
         <h1 className="headline">NOT YOUR TURN</h1>
+
+        {ahead !== null ? (
+          <p className="queueBox">
+            <span className="queueNum">{ahead}</span>
+            {ahead === 1 ? 'PICK BEFORE YOURS' : 'PICKS BEFORE YOURS'}
+            <em>
+              {ahead === 1
+                ? 'You are next. Stay on this page.'
+                : `You are number ${ahead + 1} in the queue.`}
+            </em>
+          </p>
+        ) : null}
+
         <p className="warnBody">Your official score is locked.</p>
-        <p className="warnBody">Draft-position selection is underway.</p>
         <p className="warnBody muted">You will get access when you are on the clock.</p>
         <p className="meta">This page updates on its own. Leave it open.</p>
         <button className="btn secondary" onClick={onMenu}>

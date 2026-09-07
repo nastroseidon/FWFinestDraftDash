@@ -116,6 +116,29 @@ export default function AdminPage() {
         <p className="adminNote">
           Override forces a window open or shut. Schedule follows the times above.
         </p>
+        <div className="adminRow">
+          <span className="adminRowLabel">
+            PRACTICE
+            <em>{league.practiceOpen ? 'open' : 'closed'}</em>
+          </span>
+          <span className="adminBtns">
+            <button
+              className={league.practiceOpen ? 'aBtn on' : 'aBtn'}
+              disabled={busy}
+              onClick={() => act(() => api.admin.setPractice(true))}
+            >
+              OPEN
+            </button>
+            <button
+              className={!league.practiceOpen ? 'aBtn on' : 'aBtn'}
+              disabled={busy}
+              onClick={() => act(() => api.admin.setPractice(false))}
+            >
+              SHUT
+            </button>
+          </span>
+        </div>
+
         {(['official', 'selection'] as const).map((which) => {
           const current =
             which === 'official' ? league.officialOpenOverride : league.selectionOpenOverride;

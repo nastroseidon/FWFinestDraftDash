@@ -24,6 +24,12 @@ export type DraftStatus = {
   /** Their own slot once chosen. */
   selectedSlot: number | null;
   onTheClock: boolean;
+  /**
+   * How many managers pick before them, once selection is under way.
+   * Their own place in the queue only. It says nothing about who those
+   * managers are or what anybody scored.
+   */
+  picksAhead: number | null;
   /** Only populated when they are on the clock. */
   board: { slot: number; available: boolean }[] | null;
   leagueSize: number;
@@ -171,6 +177,7 @@ export async function draftStatus(memberId: string): Promise<DraftStatus> {
     leagueSize: settings.league_size,
     board: null,
     onTheClock: false,
+    picksAhead: null,
   };
 
   const me = (
@@ -195,8 +202,14 @@ export async function draftStatus(memberId: string): Promise<DraftStatus> {
   if (await dealLeftoverSlots()) await releaseRevealIfComplete();
 
   const fresh = (
-    await query<{ official_score: number | null; selected_draft_slot: number | null }>(
-      'select official_score, selected_draft_slot from league_members where id = $1',
+    await query<{
+      official_score: number | null;
+      selected_draft_slot: number | null;
+      completed: boolean;
+    }>(
+      `select official_score, selected_draft_slot,
+              (official_completed_at is not null) as completed
+         from league_members where id = $1`,
       [memberId],
     )
   )[0];
@@ -212,11 +225,36 @@ export async function draftStatus(memberId: string): Promise<DraftStatus> {
     fresh?.selected_draft_slot === null &&
     (await transaction(async (c) => (await currentSelectorId(c)) === memberId));
 
+  // Only managers who ran get a turn, so only they can be queued behind others.
+  // A no-show is never in the queue: they are dealt whatever is left instead.
+  const picksAhead =
+    phase === 'selection' &&
+    fresh?.completed === true &&
+    fresh?.selected_draft_slot === null &&
+    !onTheClock
+      ? Number(
+          (
+            await query<{ n: string }>(
+              `select count(*)::text as n
+                 from league_members ahead
+                where ahead.selected_draft_slot is null
+                  and ahead.official_completed_at is not null
+                  and ahead.selection_priority is not null
+                  and ahead.selection_priority < (
+                    select selection_priority from league_members where id = $1
+                  )`,
+              [memberId],
+            )
+          )[0]?.n ?? '0',
+        )
+      : null;
+
   return {
     ...base,
     officialScore: fresh?.official_score ?? null,
     selectedSlot: fresh?.selected_draft_slot ?? null,
     onTheClock,
+    picksAhead,
     // The board is only ever sent to the player on the clock, and it carries
     // availability alone. No names, no order, no timestamps.
     board: onTheClock ? await buildBoard(settings) : null,

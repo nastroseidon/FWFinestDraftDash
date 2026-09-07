@@ -7,6 +7,7 @@ export type DraftStatus = {
   officialScore: number | null;
   selectedSlot: number | null;
   onTheClock: boolean;
+  picksAhead: number | null;
   board: { slot: number; available: boolean }[] | null;
   leagueSize: number;
   selectionComplete: boolean;
@@ -44,6 +45,8 @@ export type AdminOverview = {
     selectionOpenOverride: boolean | null;
     rankingsFrozen: boolean;
     revealReleased: boolean;
+    practiceOpen: boolean;
+    practiceCloseAt: string;
   };
   members: AdminMember[];
   onTheClock: { id: string; display_name: string } | null;
@@ -100,6 +103,7 @@ export type SessionState =
         officialCloseAt: string;
         allRunsComplete: boolean;
         revealAvailable: boolean;
+        onTheClock: boolean;
         serverNow: string;
       };
     };
@@ -134,6 +138,8 @@ export const api = {
     overview: () => call<AdminOverview>('/api/admin/overview'),
     setWindow: (which: 'official' | 'selection', value: boolean | null) =>
       call<{ ok: true }>('/api/admin/window', { which, value }),
+    setPractice: (open: boolean) =>
+      call<{ ok: true }>('/api/admin/window', { which: 'practice', value: open }),
     resetAttempt: (memberId: string) =>
       call<{ ok: true }>('/api/admin/reset-attempt', { memberId }),
     assignSlot: (memberId: string, slot: number) =>
