@@ -86,6 +86,16 @@ async function resetMember(name: string) {
   );
 }
 
+/** Practice has a real deadline that may already have passed. */
+async function setPracticeOpen(open: boolean) {
+  await query(
+    `update league_settings
+        set practice_close_at = now() + ($1 || ' minutes')::interval
+      where id = 1`,
+    [open ? '60' : '-1'],
+  );
+}
+
 async function setOfficialWindow(open: boolean | null) {
   await query('update league_settings set official_open_override = $1 where id = 1', [open]);
 }
@@ -264,6 +274,7 @@ async function main() {
 
   console.log('\nPractice');
   {
+    await setPracticeOpen(true);
     await resetMember(P3.name);
     const c = new Client();
     await c.post('/api/login', { name: P3.name, pin: P3.pin });
@@ -285,6 +296,11 @@ async function main() {
 
     const fractional = await c.post('/api/practice', { score: 12.5 });
     check('non-integer scores are rejected', fractional.status === 400, `got ${fractional.status}`);
+
+    // And the deadline itself still bites.
+    await setPracticeOpen(false);
+    const late = await c.post('/api/practice', { score: 700 });
+    check('practice is refused after its deadline', late.status === 409, `got ${late.status}`);
   }
 
   console.log('\nEvery official run uses the same course');

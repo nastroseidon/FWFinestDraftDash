@@ -80,7 +80,17 @@ async function setPracticeCloses(offsetMinutes: number) {
   );
 }
 
+/**
+ * Puts practice back where the real league has it. Expressed relative to now
+ * rather than as a fixed date, so these tests keep meaning the same thing after
+ * the real deadline has passed.
+ */
 async function restoreSchedule() {
+  await setPracticeCloses(60);
+}
+
+/** Restores the league's actual configured deadline. */
+async function restoreRealSchedule() {
   await query(`
     update league_settings
        set practice_close_at = timestamptz '2026-09-07 00:00:00 America/Indiana/Indianapolis'
@@ -218,7 +228,7 @@ async function main() {
   }
 
   await resetAll();
-  await restoreSchedule();
+  await restoreRealSchedule();
 
   console.log(`\n${passed} passed, ${failures.length} failed`);
   if (failures.length) {
