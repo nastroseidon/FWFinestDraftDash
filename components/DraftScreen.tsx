@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import OnTheClockStrip from '@/components/OnTheClockStrip';
 import { api, type DraftStatus } from '@/lib/client';
 import { randomTakenMessage } from '@/lib/snark';
 import { sfx } from '@/game/audio';
@@ -107,6 +108,9 @@ export default function DraftScreen({ onMenu }: { onMenu: () => void }) {
   if (!status.onTheClock && status.officialScore === null) {
     return (
       <Shell>
+        {status.onTheClockNow ? (
+          <OnTheClockStrip info={status.onTheClockNow} mine={false} />
+        ) : null}
         <h1 className="headline">NO OFFICIAL RUN</h1>
         <p className="warnBody">You did not complete an official run.</p>
         <p className="warnBody">
@@ -129,6 +133,10 @@ export default function DraftScreen({ onMenu }: { onMenu: () => void }) {
       <Shell>
         <h1 className="headline">NOT YOUR TURN</h1>
 
+        {status.onTheClockNow ? (
+          <OnTheClockStrip info={status.onTheClockNow} mine={false} />
+        ) : null}
+
         {ahead !== null ? (
           <p className="queueBox">
             <span className="queueNum">{ahead}</span>
@@ -143,7 +151,7 @@ export default function DraftScreen({ onMenu }: { onMenu: () => void }) {
 
         <p className="warnBody">Your official score is locked.</p>
         <p className="warnBody muted">You will get access when you are on the clock.</p>
-        <p className="meta">This page updates on its own. Leave it open.</p>
+        <p className="meta">This page updates on its own.</p>
         <button className="btn secondary" onClick={onMenu}>
           MAIN MENU
         </button>
@@ -203,6 +211,9 @@ export default function DraftScreen({ onMenu }: { onMenu: () => void }) {
   return (
     <Shell wide>
       <h1 className="headline">YOU ARE ON THE CLOCK</h1>
+      {status.onTheClockNow ? (
+        <OnTheClockStrip info={status.onTheClockNow} mine />
+      ) : null}
       <p className="meta">Choose your 2026 Fort Wayne Finest draft position.</p>
       <div className="slotGrid">
         {status.board?.map(({ slot, available }) => (

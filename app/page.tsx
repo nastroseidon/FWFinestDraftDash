@@ -59,6 +59,21 @@ export default function Home() {
     };
   }, [refresh]);
 
+  // Keep the menu live, so a turn arriving lights it up without a reload and
+  // the on-the-clock timer keeps moving. Only while the menu is actually shown:
+  // polling behind a running game would be wasted work.
+  useEffect(() => {
+    if (screen !== 'menu') return;
+    let stop = false;
+    const id = setInterval(() => {
+      if (!stop) void refresh().catch(() => {});
+    }, 10000);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, [screen, refresh]);
+
   const startPractice = useCallback(() => {
     sfx.loadPreference();
     sfx.unlock();

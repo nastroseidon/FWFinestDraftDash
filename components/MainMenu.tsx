@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import OnTheClockStrip from '@/components/OnTheClockStrip';
 import { formatCountdown, type SessionState } from '@/lib/client';
 
 type Props = {
@@ -47,6 +48,10 @@ export default function MainMenu({
 
         {league.onTheClock ? (
           <p className="onClockAlert">PICK YOUR DRAFT POSITION NOW</p>
+        ) : null}
+
+        {league.onTheClockNow ? (
+          <OnTheClockStrip info={league.onTheClockNow} mine={league.onTheClock} />
         ) : null}
 
         <p className="who">

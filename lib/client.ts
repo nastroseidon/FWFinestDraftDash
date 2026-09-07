@@ -2,6 +2,12 @@
 
 export type Phase = 'official' | 'ranking' | 'selection' | 'complete';
 
+export type OnTheClockInfo = {
+  manager: string;
+  score: number;
+  elapsedMs: number;
+};
+
 export type DraftStatus = {
   phase: Phase;
   officialScore: number | null;
@@ -11,6 +17,7 @@ export type DraftStatus = {
   board: { slot: number; available: boolean }[] | null;
   leagueSize: number;
   selectionComplete: boolean;
+  onTheClockNow: OnTheClockInfo | null;
 };
 
 export type AdminMember = {
@@ -104,6 +111,7 @@ export type SessionState =
         allRunsComplete: boolean;
         revealAvailable: boolean;
         onTheClock: boolean;
+        onTheClockNow: OnTheClockInfo | null;
         serverNow: string;
       };
     };

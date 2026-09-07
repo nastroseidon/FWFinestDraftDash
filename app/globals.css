@@ -387,6 +387,59 @@ body::after {
   }
 }
 
+/* --- On the clock, publicly --- */
+
+.clockStrip {
+  margin: 0 0 20px;
+  padding: 12px 10px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 3px solid var(--fwf-red);
+}
+
+.clockStrip.mine {
+  border-color: var(--fwf-gold);
+  background: rgba(242, 192, 39, 0.12);
+}
+
+.clockLabel {
+  display: block;
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: var(--fwf-gold);
+}
+
+.clockName {
+  display: block;
+  margin-top: 8px;
+  font-size: 18px;
+  letter-spacing: 1px;
+  color: var(--fwf-cream);
+}
+
+.clockScore {
+  display: block;
+  margin-top: 6px;
+  font-size: 9px;
+  color: var(--fwf-green);
+}
+
+.clockTime {
+  display: block;
+  margin-top: 10px;
+  font-size: 30px;
+  color: var(--fwf-cream);
+  text-shadow: 3px 3px 0 var(--fwf-red);
+}
+
+.clockNag {
+  display: block;
+  margin-top: 8px;
+  font-size: 8px;
+  line-height: 1.7;
+  letter-spacing: 1px;
+  color: var(--fwf-gold);
+}
+
 /* --- Queue position --- */
 
 .queueBox {

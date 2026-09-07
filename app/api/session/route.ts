@@ -1,5 +1,5 @@
 import { currentMember, json } from '@/lib/api';
-import { draftStatus } from '@/lib/draft';
+import { draftStatus, onTheClockNow } from '@/lib/draft';
 import {
   loadSettings,
   msUntilOfficialCloses,
@@ -27,6 +27,8 @@ export async function GET() {
   // about anybody else, which is the same rule the draft screen follows.
   const onTheClock =
     phase === 'selection' ? (await draftStatus(member.id)).onTheClock : false;
+  // Public on purpose, so the league can chase whoever is dawdling.
+  const clockNow = phase === 'selection' ? await onTheClockNow() : null;
 
   return json({
     signedIn: true,
@@ -56,6 +58,7 @@ export async function GET() {
       allRunsComplete: settings.all_runs_complete_at !== null,
       revealAvailable: settings.reveal_released,
       onTheClock,
+      onTheClockNow: clockNow,
       serverNow: settings.server_now,
     },
   });

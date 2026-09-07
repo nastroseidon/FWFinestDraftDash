@@ -17,6 +17,15 @@ import { releaseRevealIfComplete } from './reveal';
  *  cost is irrelevant and the reasoning is much simpler than row locking. */
 const DRAFT_LOCK = 4820260907;
 
+/** Who the league is currently waiting on. Public, deliberately. */
+export type OnTheClockInfo = {
+  manager: string;
+  /** Their official yardage. Public once they are up. */
+  score: number;
+  /** How long they have been on the clock, in ms at the time of the request. */
+  elapsedMs: number;
+};
+
 export type DraftStatus = {
   phase: ReturnType<typeof phaseFor>;
   /** Their own locked score, or null before their run is complete. */
@@ -35,6 +44,8 @@ export type DraftStatus = {
   leagueSize: number;
   /** True once every slot is taken. */
   selectionComplete: boolean;
+  /** Who everyone is waiting on, so they can be hurried along. */
+  onTheClockNow: OnTheClockInfo | null;
 };
 
 /**
@@ -85,6 +96,47 @@ export async function ensureRankings(): Promise<void> {
     await c.query('update league_settings set rankings_frozen_at = now() where id = 1');
   });
 }
+
+/**
+ * Who is on the clock, how long for, and what they scored.
+ *
+ * Deliberately public: the league wants to be able to chase whoever is
+ * dawdling. Elapsed time runs from the last pick, or from the moment selection
+ * opened if nobody has picked yet.
+ *
+ * It is sent as a duration rather than a timestamp, so a browser with a wrong
+ * clock still counts up correctly.
+ */
+export async function onTheClockNow(): Promise<OnTheClockInfo | null> {
+  const rows = await query<{
+    display_name: string;
+    official_score: number | null;
+    elapsed_ms: string;
+  }>(`
+    select m.display_name,
+           m.official_score,
+           (extract(epoch from (now() - greatest(
+             coalesce((select max(selected_at) from league_members), 'epoch'::timestamptz),
+             coalesce((select all_runs_complete_at from league_settings where id = 1), 'epoch'::timestamptz),
+             coalesce((select selection_open_at from league_settings where id = 1), 'epoch'::timestamptz)
+           ))) * 1000)::bigint::text as elapsed_ms
+      from league_members m
+     where m.selected_draft_slot is null
+       and m.selection_priority is not null
+       and m.official_completed_at is not null
+     order by m.selection_priority asc
+     limit 1
+  `);
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    manager: row.display_name,
+    score: row.official_score ?? 0,
+    elapsedMs: Math.max(0, Number(row.elapsed_ms)),
+  };
+}
+
 
 /**
  * The member whose turn it is: lowest priority still without a slot, among
@@ -194,6 +246,7 @@ export async function draftStatus(memberId: string): Promise<DraftStatus> {
       officialScore: me?.official_score ?? null,
       selectedSlot: me?.selected_draft_slot ?? null,
       selectionComplete: false,
+      onTheClockNow: null,
     };
   }
 
@@ -259,6 +312,7 @@ export async function draftStatus(memberId: string): Promise<DraftStatus> {
     // availability alone. No names, no order, no timestamps.
     board: onTheClock ? await buildBoard(settings) : null,
     selectionComplete,
+    onTheClockNow: selectionComplete ? null : await onTheClockNow(),
   };
 }
 

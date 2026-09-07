@@ -252,10 +252,16 @@ async function main() {
     check('the top ranked manager is told on the menu', mine.body.league?.onTheClock === true);
     check('the next one is not', theirs.body.league?.onTheClock === false);
 
-    // It must not leak who else is up.
+    // Who is on the clock is public by design; who is queued behind them is not.
     check(
-      'it says nothing about who else is picking',
-      !JSON.stringify(theirs.body).includes(names[0]),
+      'the menu names the manager on the clock',
+      theirs.body.league?.onTheClockNow?.manager === names[0],
+      theirs.body.league?.onTheClockNow?.manager,
+    );
+    const behind = names.slice(1).filter((n) => n !== names[1]);
+    check(
+      'but nobody further down the queue',
+      !behind.some((n) => JSON.stringify(theirs.body).includes(n)),
     );
 
     // And it moves along with the draft.
@@ -307,8 +313,10 @@ async function main() {
     check('the fifth has four ahead', e.body.picksAhead === 4, `${e.body.picksAhead}`);
 
     check(
-      'the queue count names nobody',
-      !names.filter((n) => n !== names[4]).some((n) => JSON.stringify(e.body).includes(n)),
+      'the queue count names only the manager on the clock',
+      !names
+        .filter((n) => n !== names[4] && n !== names[0])
+        .some((n) => JSON.stringify(e.body).includes(n)),
     );
 
     // The queue shortens as picks land.
@@ -337,17 +345,64 @@ async function main() {
     await query('update league_settings set official_open_override = null where id = 1');
   }
 
-  console.log('\nA waiting player learns nothing about anyone else');
+  console.log('\nEveryone can see who is holding things up');
+  {
+    await resetDraft(scores);
+    await setSelectionOpen(true);
+
+    const waiting = await new Client(names[5]).signIn();
+    const st = await waiting.get('/api/draft/status');
+
+    check('the waiting player is told who is on the clock',
+      st.body.onTheClockNow?.manager === names[0], st.body.onTheClockNow?.manager);
+    check('with their official score', st.body.onTheClockNow?.score === scores[names[0]],
+      `${st.body.onTheClockNow?.score}`);
+    check('and how long they have been there',
+      typeof st.body.onTheClockNow?.elapsedMs === 'number' && st.body.onTheClockNow.elapsedMs >= 0);
+
+    const sess = await waiting.get('/api/session');
+    check('the menu carries it too', sess.body.league?.onTheClockNow?.manager === names[0]);
+
+    // It follows the draft along.
+    const first = await new Client(names[0]).signIn();
+    await first.get('/api/draft/status');
+    await first.post('/api/draft/claim', { slot: 12 });
+
+    const after = await waiting.get('/api/draft/status');
+    check('it moves to the next manager', after.body.onTheClockNow?.manager === names[1],
+      after.body.onTheClockNow?.manager);
+    check('the timer restarts for them', after.body.onTheClockNow?.elapsedMs < 5000,
+      `${after.body.onTheClockNow?.elapsedMs}`);
+
+    // Still no board and no other scores leak to a waiting manager.
+    check('a waiting player still gets no board', after.body.board === null);
+    const text = JSON.stringify(after.body);
+    const others = names.filter((n) => n !== names[1] && n !== names[5]);
+    check('only the manager on the clock is named', !others.some((n) => text.includes(n)));
+  }
+
+  console.log('\nA waiting player learns nothing beyond who is on the clock');
   {
     const waiting = await new Client(names[5]).signIn();
     const res = await waiting.get('/api/draft/status');
     const text = JSON.stringify(res.body);
+    const onClock = res.body.onTheClockNow?.manager;
 
-    const others = names.filter((n) => n !== names[5]);
-    check('no other manager is named', !others.some((n) => text.includes(n)));
+    // The manager on the clock is public by design. Nobody else is.
+    const others = names.filter((n) => n !== names[5] && n !== onClock);
+    check('no other manager is named', !others.some((n) => text.includes(n)), onClock);
+
     check('no rank is exposed', !/priority|rank/i.test(text));
-    check('no other score is exposed', !/5000|4900|4800/.test(text));
-    check('nothing says who is currently picking', !/onTheClockMember|currentSelector/i.test(text));
+    check('their own draft board is not handed out', res.body.board === null);
+
+    // Only the on-clock manager's score is public; nobody else's.
+    const otherScores = names
+      .filter((n) => n !== names[5] && n !== onClock)
+      .map((n) => String(scores[n]));
+    check(
+      'no other score is exposed',
+      !otherScores.some((v) => new RegExp(`\\b${v}\\b`).test(text)),
+    );
   }
 
   console.log('\nClaiming a slot');
