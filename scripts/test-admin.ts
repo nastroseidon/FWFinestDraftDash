@@ -83,6 +83,16 @@ async function resetAll(admin: Client) {
   await admin.post('/api/admin/reset-league', { confirm: 'RESET' });
 }
 
+/** Practice has a real deadline that may already have passed. */
+async function setPracticeOpen(open: boolean) {
+  await query(
+    `update league_settings
+        set practice_close_at = now() + ($1 || ' minutes')::interval
+      where id = 1`,
+    [open ? '60' : '-1'],
+  );
+}
+
 async function setScores(scores: Record<string, number | null>) {
   for (const [name, score] of Object.entries(scores)) {
     if (score === null) continue;
@@ -151,6 +161,7 @@ async function main() {
   console.log('\nPractice attempts are counted');
   {
     await resetAll(admin);
+    await setPracticeOpen(true);
     const names = ROSTER.map((m) => m.name);
 
     const before = await admin.get('/api/admin/overview');
@@ -215,6 +226,7 @@ async function main() {
     const wiped = await admin.get('/api/admin/overview');
     check('a league reset clears the counts', wiped.body.counts.practiceRuns === 0);
     check('and the yardage', wiped.body.counts.practiceYards === 0);
+    await setPracticeOpen(false);
   }
 
   console.log('\nOpening and closing the windows');
@@ -316,6 +328,76 @@ async function main() {
       redone.body.allRunsComplete === true,
       JSON.stringify(redone.body),
     );
+  }
+
+  console.log('\nA reset is invisible to everyone else');
+  {
+    await resetAll(admin);
+    const names = ROSTER.map((m) => m.name);
+    await setScores(Object.fromEntries(names.map((n, i) => [n, 5000 - i * 100])));
+
+    const victim = names[4];
+    const bystander = await new Client().signIn(names[8], PINS[names[8]]);
+    const another = await new Client().signIn(names[2], PINS[names[2]]);
+
+    // Everything a normal manager can see, before and after. The clock fields
+    // move on every request, so they are stripped: what matters is whether any
+    // meaningful field changes.
+    const stripClock = (body: Record<string, unknown>) => {
+      const clone = JSON.parse(JSON.stringify(body));
+      if (clone.league) {
+        delete clone.league.serverNow;
+        delete clone.league.msUntilPracticeCloses;
+        delete clone.league.msUntilOfficialCloses;
+      }
+      return clone;
+    };
+
+    const snapshot = async () => ({
+      session: stripClock((await bystander.get('/api/session')).body),
+      draft: stripClock((await bystander.get('/api/draft/status')).body),
+      reveal: stripClock((await bystander.get('/api/reveal')).body),
+      other: stripClock((await another.get('/api/session')).body),
+    });
+
+    const before = await snapshot();
+
+    const overview = await admin.get('/api/admin/overview');
+    const target = overview.body.members.find(
+      (m: { display_name: string }) => m.display_name === victim,
+    );
+    const res = await admin.post('/api/admin/reset-attempt', { memberId: target.id });
+    check('the reset succeeds', res.status === 200, `got ${res.status}`);
+
+    const after = await snapshot();
+
+    check(
+      'a bystander session is byte for byte unchanged',
+      JSON.stringify(before.session) === JSON.stringify(after.session),
+    );
+    check(
+      'their draft status is unchanged',
+      JSON.stringify(before.draft) === JSON.stringify(after.draft),
+    );
+    check(
+      'the reveal is unchanged',
+      JSON.stringify(before.reveal) === JSON.stringify(after.reveal),
+    );
+    check(
+      'a second manager sees nothing either',
+      JSON.stringify(before.other) === JSON.stringify(after.other),
+    );
+    check(
+      'the reset manager is never named to anyone',
+      !JSON.stringify(after).includes(victim),
+    );
+
+    // And the manager who was reset simply gets their run back.
+    const theirs = await new Client().signIn(victim, PINS[victim]);
+    const mine = await theirs.get('/api/session');
+    check('the reset manager can run again', mine.body.league?.officialAvailable === true);
+    check('their old score is gone', mine.body.member?.officialScore === null);
+    check('and nothing tells them it was reset', !/reset/i.test(JSON.stringify(mine.body)));
   }
 
   console.log('\nA reset cannot corrupt a draft already under way');
