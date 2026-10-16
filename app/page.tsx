@@ -2,127 +2,181 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useState } from 'react';
-import LoginScreen from '@/components/LoginScreen';
-import MainMenu from '@/components/MainMenu';
+import HighScores, { type BoardRow } from '@/components/HighScores';
 import MuteButton from '@/components/MuteButton';
-import OfficialWarning from '@/components/OfficialWarning';
-import DraftScreen from '@/components/DraftScreen';
-import ResultScreen from '@/components/ResultScreen';
-import RevealScreen from '@/components/RevealScreen';
-import { api, type SessionState } from '@/lib/client';
+import ScoreEntry from '@/components/ScoreEntry';
+import ScoreReveal from '@/components/ScoreReveal';
 import { sfx } from '@/game/audio';
-import { PRACTICE_SEED } from '@/game/config';
+import { BOARD_SIZE } from '@/lib/board';
 
 // Phaser is browser-only.
 const GameCanvas = dynamic(() => import('@/components/GameCanvas'), { ssr: false });
 
-type Screen =
-  | 'loading'
-  | 'login'
-  | 'menu'
-  | 'practice'
-  | 'practiceResult'
-  | 'officialWarning'
-  | 'official'
-  | 'officialResult'
-  | 'draft'
-  | 'reveal';
+type Screen = 'menu' | 'play' | 'entry' | 'result' | 'board';
 
+async function fetchBoard(): Promise<BoardRow[]> {
+  const res = await fetch('/api/scores', { cache: 'no-store' });
+  if (!res.ok) throw new Error('Could not load the scoreboard.');
+  const body = await res.json();
+  return body.scores as BoardRow[];
+}
+
+/** Open to anyone: no sign-in, one shared scoreboard, unlimited runs. */
 export default function Home() {
-  const [screen, setScreen] = useState<Screen>('loading');
-  const [session, setSession] = useState<SessionState | null>(null);
+  const [screen, setScreen] = useState<Screen>('menu');
   const [yards, setYards] = useState(0);
-  const [officialSeed, setOfficialSeed] = useState<number | null>(null);
+  const [seed, setSeed] = useState(0);
   const [runId, setRunId] = useState(0);
-  const [error, setError] = useState('');
+  const [scores, setScores] = useState<BoardRow[] | null>(null);
+  const [boardError, setBoardError] = useState('');
+  const [mine, setMine] = useState<BoardRow | null>(null);
 
-  const refresh = useCallback(async () => {
-    const next = await api.session();
-    setSession(next);
-    return next;
+  const loadBoard = useCallback(async () => {
+    setBoardError('');
+    try {
+      setScores(await fetchBoard());
+    } catch (err) {
+      setBoardError(err instanceof Error ? err.message : 'Could not load the scoreboard.');
+    }
   }, []);
 
+  // The board doubles as the menu's attract screen, so it is fetched up front.
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
       try {
-        const next = await refresh();
-        if (!cancelled) setScreen(next.signedIn ? 'menu' : 'login');
+        const board = await fetchBoard();
+        if (!cancelled) setScores(board);
       } catch {
-        if (!cancelled) setScreen('login');
+        if (!cancelled) setBoardError('Could not load the scoreboard.');
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [refresh]);
-
-  // Keep the menu live, so a turn arriving lights it up without a reload and
-  // the on-the-clock timer keeps moving. Only while the menu is actually shown:
-  // polling behind a running game would be wasted work.
-  useEffect(() => {
-    if (screen !== 'menu') return;
-    let stop = false;
-    const id = setInterval(() => {
-      if (!stop) void refresh().catch(() => {});
-    }, 10000);
-    return () => {
-      stop = true;
-      clearInterval(id);
-    };
-  }, [screen, refresh]);
-
-  const startPractice = useCallback(() => {
-    sfx.loadPreference();
-    sfx.unlock();
-    setRunId((n) => n + 1);
-    setScreen('practice');
   }, []);
 
-  const handlePracticeOver = useCallback(
+  const start = useCallback(() => {
+    sfx.loadPreference();
+    sfx.unlock();
+    // A fresh course every run, so nobody can memorize one layout.
+    setSeed(Math.floor(Math.random() * 2_000_000_000) + 1);
+    setRunId((n) => n + 1);
+    setMine(null);
+    setScreen('play');
+  }, []);
+
+  const handleRunOver = useCallback(
     async (finalYards: number) => {
       setYards(finalYards);
-      setScreen('practiceResult');
-      // Persisting the best is not worth blocking the reveal on.
+
+      // The board is re-read now rather than trusted from the menu: someone
+      // else may have knocked this run out of the top 20 while it was being run.
+      let board: BoardRow[] | null = null;
       try {
-        await api.practice(finalYards);
-        await refresh();
+        board = await fetchBoard();
+        setScores(board);
+        setBoardError('');
       } catch {
-        /* the score still shows; the personal best will catch up next load */
+        // Offer the entry screen anyway; the save itself reports any failure.
+        setBoardError('');
       }
+
+      const madeIt =
+        finalYards > 0 &&
+        (board === null ||
+          board.length < BOARD_SIZE ||
+          finalYards > board[board.length - 1].score);
+
+      setScreen(madeIt ? 'entry' : 'result');
     },
-    [refresh],
+    [],
   );
 
-  const beginOfficial = useCallback(async () => {
-    // The attempt is claimed server-side before a single frame is drawn.
-    const { seed } = await api.startOfficial();
-    sfx.loadPreference();
-    sfx.unlock();
-    setOfficialSeed(seed);
-    setRunId((n) => n + 1);
-    setScreen('official');
-  }, []);
+  const submitScore = useCallback(
+    async (initials: string) => {
+      const res = await fetch('/api/scores', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ initials, score: yards }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? 'Could not save your score.');
 
-  const handleOfficialOver = useCallback(
-    async (finalYards: number) => {
-      try {
-        const result = await api.completeOfficial(finalYards);
-        setYards(result.score);
-      } catch (err) {
-        setYards(finalYards);
-        setError(err instanceof Error ? err.message : 'Could not save your score.');
-      }
-      setScreen('officialResult');
-      refresh().catch(() => {});
+      setScores(body.scores as BoardRow[]);
+      setMine({ initials: initials.toUpperCase().padEnd(3, ' '), score: yards });
+      setScreen('result');
     },
-    [refresh],
+    [yards],
   );
 
-  if (screen === 'loading') {
+  if (screen === 'play') {
     return (
+      <div className="gameWrap">
+        <GameCanvas key={runId} seed={seed} onRunOver={handleRunOver} />
+      </div>
+    );
+  }
+
+  if (screen === 'entry') {
+    return (
+      <>
+        <ScoreEntry yards={yards} onSubmit={submitScore} onSkip={() => setScreen('result')} />
+        <MuteButton />
+      </>
+    );
+  }
+
+  if (screen === 'result') {
+    return (
+      <>
+        <main className="app">
+          <div className="panel">
+            <h1 className="headline">RUN OVER</h1>
+            <p className="label">FINAL DISTANCE</p>
+            <ScoreReveal yards={yards} />
+            <p className="unit">YARDS</p>
+
+            <p className="label">WORLD TOP {BOARD_SIZE}</p>
+            <HighScores scores={scores} error={boardError} highlight={mine} />
+
+            <button className="btn" onClick={start}>
+              RUN IT BACK
+            </button>
+            <button className="btn secondary" onClick={() => setScreen('menu')}>
+              MAIN MENU
+            </button>
+          </div>
+        </main>
+        <MuteButton />
+      </>
+    );
+  }
+
+  if (screen === 'board') {
+    return (
+      <>
+        <main className="app">
+          <div className="panel">
+            <h1 className="headline">WORLD TOP {BOARD_SIZE}</h1>
+            <HighScores scores={scores} error={boardError} highlight={mine} />
+            <button className="btn" onClick={start}>
+              PLAY
+            </button>
+            <button className="btn secondary" onClick={() => setScreen('menu')}>
+              MAIN MENU
+            </button>
+          </div>
+        </main>
+        <MuteButton />
+      </>
+    );
+  }
+
+  return (
+    <>
       <main className="app">
         <div className="panel">
           <p className="brand">FORT WAYNE FINEST</p>
@@ -131,109 +185,27 @@ export default function Home() {
             <br />
             DASH
           </h1>
-          <p className="meta">WARMING UP...</p>
+
+          <button className="btn" onClick={start}>
+            PLAY
+          </button>
+          <button
+            className="btn secondary"
+            onClick={() => {
+              void loadBoard();
+              setScreen('board');
+            }}
+          >
+            HIGH SCORES
+          </button>
+
+          <p className="meta">
+            TAP TO SWITCH LANES.
+            <br />
+            DO NOT GET TACKLED.
+          </p>
         </div>
       </main>
-    );
-  }
-
-  if (screen === 'login' || !session?.signedIn) {
-    return (
-      <LoginScreen
-        onSignedIn={async () => {
-          const next = await refresh();
-          setScreen(next.signedIn ? 'menu' : 'login');
-        }}
-      />
-    );
-  }
-
-  if (screen === 'practice') {
-    return (
-      <div className="gameWrap">
-        <GameCanvas key={runId} seed={PRACTICE_SEED} onRunOver={handlePracticeOver} />
-      </div>
-    );
-  }
-
-  if (screen === 'official') {
-    return (
-      <div className="gameWrap">
-        <GameCanvas
-          key={runId}
-          seed={officialSeed ?? session.league.officialSeed}
-          onRunOver={handleOfficialOver}
-        />
-      </div>
-    );
-  }
-
-  if (screen === 'practiceResult') {
-    return (
-      <>
-        <ResultScreen
-          yards={yards}
-          official={false}
-          practiceBest={session.member.practiceBest}
-          onAgain={startPractice}
-          onMenu={() => setScreen('menu')}
-        />
-        <MuteButton />
-      </>
-    );
-  }
-
-  if (screen === 'officialWarning') {
-    return (
-      <>
-        <OfficialWarning onBegin={beginOfficial} onCancel={() => setScreen('menu')} />
-        <MuteButton />
-      </>
-    );
-  }
-
-  if (screen === 'draft') {
-    return (
-      <>
-        <DraftScreen onMenu={() => { void refresh(); setScreen('menu'); }} />
-        <MuteButton />
-      </>
-    );
-  }
-
-  if (screen === 'reveal') {
-    return (
-      <>
-        <RevealScreen onMenu={() => { void refresh(); setScreen('menu'); }} />
-        <MuteButton />
-      </>
-    );
-  }
-
-  if (screen === 'officialResult') {
-    return (
-      <>
-        <ResultScreen yards={yards} official onMenu={() => setScreen('menu')} />
-        {error ? <p className="floatingError">{error}</p> : null}
-        <MuteButton />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <MainMenu
-        session={session}
-        onPractice={startPractice}
-        onOfficial={() => setScreen('officialWarning')}
-        onDraft={() => setScreen('draft')}
-        onReveal={() => setScreen('reveal')}
-        onSignOut={async () => {
-          await api.logout();
-          setSession({ signedIn: false });
-          setScreen('login');
-        }}
-      />
       <MuteButton />
     </>
   );
