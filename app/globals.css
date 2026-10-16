@@ -864,3 +864,9 @@ body:has(.app.scrollable) {
   line-height: 1.7;
   color: var(--fwf-cream);
 }
+
+/* The arcade menu uses the same treatment for a link as for a text button. */
+a.linkBtn {
+  display: inline-block;
+  text-decoration: none;
+}
