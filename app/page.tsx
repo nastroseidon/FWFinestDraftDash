@@ -2,35 +2,60 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useState } from 'react';
+import HighScores, { type BoardRow } from '@/components/HighScores';
 import MuteButton from '@/components/MuteButton';
-import ResultScreen from '@/components/ResultScreen';
+import ScoreEntry from '@/components/ScoreEntry';
+import ScoreReveal from '@/components/ScoreReveal';
 import { sfx } from '@/game/audio';
+import { BOARD_SIZE } from '@/lib/board';
 
 // Phaser is browser-only.
 const GameCanvas = dynamic(() => import('@/components/GameCanvas'), { ssr: false });
 
-const BEST_KEY = 'fwfdd.arcadeBest';
+type Screen = 'menu' | 'play' | 'entry' | 'result' | 'board';
 
-type Screen = 'menu' | 'play' | 'result';
+async function fetchBoard(): Promise<BoardRow[]> {
+  const res = await fetch('/api/scores', { cache: 'no-store' });
+  if (!res.ok) throw new Error('Could not load the scoreboard.');
+  const body = await res.json();
+  return body.scores as BoardRow[];
+}
 
-/**
- * The open arcade. No sign-in, no server: anyone can run the course as many
- * times as they like. The league's one-attempt draft app lives at /league.
- */
+/** Open to anyone: no sign-in, one shared scoreboard, unlimited runs. */
 export default function Home() {
   const [screen, setScreen] = useState<Screen>('menu');
   const [yards, setYards] = useState(0);
-  const [best, setBest] = useState(0);
   const [seed, setSeed] = useState(0);
   const [runId, setRunId] = useState(0);
+  const [scores, setScores] = useState<BoardRow[] | null>(null);
+  const [boardError, setBoardError] = useState('');
+  const [mine, setMine] = useState<BoardRow | null>(null);
 
-  // The best is this browser's alone; there is no public scoreboard to game.
-  useEffect(() => {
+  const loadBoard = useCallback(async () => {
+    setBoardError('');
     try {
-      setBest(Number(window.localStorage.getItem(BEST_KEY)) || 0);
-    } catch {
-      /* private browsing; the run still works, the best just will not stick */
+      setScores(await fetchBoard());
+    } catch (err) {
+      setBoardError(err instanceof Error ? err.message : 'Could not load the scoreboard.');
     }
+  }, []);
+
+  // The board doubles as the menu's attract screen, so it is fetched up front.
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const board = await fetchBoard();
+        if (!cancelled) setScores(board);
+      } catch {
+        if (!cancelled) setBoardError('Could not load the scoreboard.');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const start = useCallback(() => {
@@ -39,22 +64,53 @@ export default function Home() {
     // A fresh course every run, so nobody can memorize one layout.
     setSeed(Math.floor(Math.random() * 2_000_000_000) + 1);
     setRunId((n) => n + 1);
+    setMine(null);
     setScreen('play');
   }, []);
 
-  const handleRunOver = useCallback((finalYards: number) => {
-    setYards(finalYards);
-    setBest((prev) => {
-      if (finalYards <= prev) return prev;
+  const handleRunOver = useCallback(
+    async (finalYards: number) => {
+      setYards(finalYards);
+
+      // The board is re-read now rather than trusted from the menu: someone
+      // else may have knocked this run out of the top 20 while it was being run.
+      let board: BoardRow[] | null = null;
       try {
-        window.localStorage.setItem(BEST_KEY, String(finalYards));
+        board = await fetchBoard();
+        setScores(board);
+        setBoardError('');
       } catch {
-        /* nothing to do; the score still shows for this session */
+        // Offer the entry screen anyway; the save itself reports any failure.
+        setBoardError('');
       }
-      return finalYards;
-    });
-    setScreen('result');
-  }, []);
+
+      const madeIt =
+        finalYards > 0 &&
+        (board === null ||
+          board.length < BOARD_SIZE ||
+          finalYards > board[board.length - 1].score);
+
+      setScreen(madeIt ? 'entry' : 'result');
+    },
+    [],
+  );
+
+  const submitScore = useCallback(
+    async (initials: string) => {
+      const res = await fetch('/api/scores', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ initials, score: yards }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? 'Could not save your score.');
+
+      setScores(body.scores as BoardRow[]);
+      setMine({ initials: initials.toUpperCase().padEnd(3, ' '), score: yards });
+      setScreen('result');
+    },
+    [yards],
+  );
 
   if (screen === 'play') {
     return (
@@ -64,16 +120,56 @@ export default function Home() {
     );
   }
 
+  if (screen === 'entry') {
+    return (
+      <>
+        <ScoreEntry yards={yards} onSubmit={submitScore} onSkip={() => setScreen('result')} />
+        <MuteButton />
+      </>
+    );
+  }
+
   if (screen === 'result') {
     return (
       <>
-        <ResultScreen
-          yards={yards}
-          official={false}
-          practiceBest={best}
-          onAgain={start}
-          onMenu={() => setScreen('menu')}
-        />
+        <main className="app">
+          <div className="panel">
+            <h1 className="headline">RUN OVER</h1>
+            <p className="label">FINAL DISTANCE</p>
+            <ScoreReveal yards={yards} />
+            <p className="unit">YARDS</p>
+
+            <p className="label">WORLD TOP {BOARD_SIZE}</p>
+            <HighScores scores={scores} error={boardError} highlight={mine} />
+
+            <button className="btn" onClick={start}>
+              RUN IT BACK
+            </button>
+            <button className="btn secondary" onClick={() => setScreen('menu')}>
+              MAIN MENU
+            </button>
+          </div>
+        </main>
+        <MuteButton />
+      </>
+    );
+  }
+
+  if (screen === 'board') {
+    return (
+      <>
+        <main className="app">
+          <div className="panel">
+            <h1 className="headline">WORLD TOP {BOARD_SIZE}</h1>
+            <HighScores scores={scores} error={boardError} highlight={mine} />
+            <button className="btn" onClick={start}>
+              PLAY
+            </button>
+            <button className="btn secondary" onClick={() => setScreen('menu')}>
+              MAIN MENU
+            </button>
+          </div>
+        </main>
         <MuteButton />
       </>
     );
@@ -93,20 +189,21 @@ export default function Home() {
           <button className="btn" onClick={start}>
             PLAY
           </button>
+          <button
+            className="btn secondary"
+            onClick={() => {
+              void loadBoard();
+              setScreen('board');
+            }}
+          >
+            HIGH SCORES
+          </button>
 
           <p className="meta">
             TAP TO SWITCH LANES.
             <br />
             DO NOT GET TACKLED.
           </p>
-
-          <p className="meta">
-            YOUR BEST — {best.toLocaleString('en-US')} YARDS
-          </p>
-
-          <a className="linkBtn" href="/league">
-            LEAGUE SIGN IN
-          </a>
         </div>
       </main>
       <MuteButton />

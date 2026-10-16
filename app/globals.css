@@ -870,3 +870,54 @@ a.linkBtn {
   display: inline-block;
   text-decoration: none;
 }
+
+/* --- World scoreboard --- */
+
+.board {
+  list-style: none;
+  margin: 14px 0 24px;
+  padding: 0;
+  text-align: left;
+}
+
+.boardRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 4px;
+  font-size: 11px;
+  color: var(--fwf-cream);
+  border-bottom: 1px solid rgba(245, 241, 230, 0.12);
+}
+
+.boardRow.mine {
+  color: var(--fwf-gold);
+}
+
+.boardRank {
+  opacity: 0.5;
+  font-size: 9px;
+}
+
+/* Spaces are legal initials, so the slot has to hold its width. */
+.boardName {
+  flex: 1;
+  white-space: pre;
+  letter-spacing: 2px;
+}
+
+.boardScore {
+  font-variant-numeric: tabular-nums;
+}
+
+.initialsField {
+  text-align: center;
+  letter-spacing: 10px;
+  text-transform: uppercase;
+}
+
+.bigScore {
+  margin: 0;
+  font-size: clamp(30px, 12vw, 48px);
+  color: var(--fwf-gold);
+}
